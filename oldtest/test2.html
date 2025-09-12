@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hydra JS avec Micro Externe - 4 bandes fréquence avec refresh</title>
+  <!-- (Optionnel) Fallback navigateur : refresh toutes les 120s -->
+  <meta http-equiv="refresh" content="120">
+  <style>
+    html, body {
+      margin: 0; padding: 0; overflow: hidden;
+      background: black; width: 100%; height: 100%;
+    }
+    canvas {
+      display: block;
+      width: 100vw; height: 100vh;
+      position: fixed; top: 0; left: 0;
+      z-index: 0;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hydra-synth/dist/hydra-synth.js"></script>
+</head>
+<body>
+  <script>
+    // === Refresh complet toutes les 2 minutes ===
+    const REFRESH_MS = 120000; // 2 min
+    setInterval(() => location.reload(), REFRESH_MS);
+
+    // Variables globales pour les 4 bandes fréquence (0-1)
+    let low = 0, mid1 = 0, mid2 = 0, high = 0;
+    let audioCapture = null; // { stop }
+
+    async function setupAudioCapture() {
+      let stream = null, audioCtx = null, source = null, analyser = null, dataArray = null, rafId = null;
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        source = audioCtx.createMediaStreamSource(stream);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        function getBandAverage(startBin, endBin) {
+          let sum = 0;
+          for (let i = startBin; i <= endBin; i++) sum += dataArray[i];
+          return (sum / (endBin - startBin + 1)) / 255;
+        }
+
+        function updateAudioLevels() {
+          analyser.getByteFrequencyData(dataArray);
+          const binCount = dataArray.length;
+
+          const lowStart = 0;
+          const lowEnd   = Math.floor(binCount * 0.25) - 1;
+          const mid1Start= lowEnd + 1;
+          const mid1End  = Math.floor(binCount * 0.5) - 1;
+          const mid2Start= mid1End + 1;
+          const mid2End  = Math.floor(binCount * 0.75) - 1;
+          const highStart= mid2End + 1;
+          const highEnd  = binCount - 1;
+
+          low  = getBandAverage(lowStart, lowEnd);
+          mid1 = getBandAverage(mid1Start, mid1End);
+          mid2 = getBandAverage(mid2Start, mid2End);
+          high = getBandAverage(highStart, highEnd);
+
+          if (low  < 0.05) low  = 0;
+          if (mid1 < 0.05) mid1 = 0;
+          if (mid2 < 0.05) mid2 = 0;
+          if (high < 0.05) high = 0;
+
+          rafId = requestAnimationFrame(updateAudioLevels);
+        }
+        updateAudioLevels();
+
+        console.log("Micro activé et analyse audio autonome OK");
+
+        function stop() {
+          if (rafId) cancelAnimationFrame(rafId);
+          if (source) source.disconnect();
+          if (analyser) analyser.disconnect();
+          if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
+          if (stream) stream.getTracks().forEach(t => t.stop());
+          console.log("Capture audio arrêtée");
+        }
+        return { stop };
+
+      } catch (err) {
+        alert("Accès micro refusé ou impossible.");
+        console.error(err);
+        return null;
+      }
+    }
+
+    // Lance UNE FOIS la capture (le refresh de page fera le reset global)
+    (async () => { audioCapture = await setupAudioCapture(); })();
+
+    // Coupe proprement à la fermeture/reload
+    window.addEventListener('beforeunload', () => {
+      if (audioCapture && typeof audioCapture.stop === 'function') audioCapture.stop();
+    });
+
+    // Setup Hydra avec canvas
+    const canvas = document.createElement("canvas");
+    document.body.appendChild(canvas);
+
+    const hydra = new Hydra({
+      canvas,
+      detectAudio: false,
+      width: window.innerWidth,
+      height: window.innerHeight
+    });
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      hydra.setResolution(window.innerWidth, window.innerHeight);
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    // Patch Hydra (exemple)
+    osc(() => low * 10, 0.5, 0.8)
+      .color(() => low, () => mid1, () => mid2)
+      .add(
+        osc(() => mid1 * 15, 0.2, 1).rotate(() => high * Math.PI)
+      )
+      .blend(
+        osc(() => mid2 * 20, 0.7, 0.5).color(() => high, () => low, () => mid1)
+      )
+      .out();
+  </script>
+</body>
+</html>

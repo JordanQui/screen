@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Hydra Shell — instant swap + mic reset 4min + robust 4-band boiler</title>
+  <meta name="theme-color" content="#000000">
+  <style>
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    .stack { position:fixed; inset:0; display:grid; place-items:stretch; background:#000; }
+    .layer {
+      grid-area:1/1; border:0; width:100%; height:100%;
+      background:#000; z-index:1; /* au-dessus passe à z=2 */
+    }
+    #hud {
+      position:fixed; left:8px; bottom:8px; color:#0f0;
+      font:12px ui-monospace, Menlo, Consolas, monospace;
+      background:#000a; padding:6px 8px; border-radius:6px; white-space:pre; pointer-events:none;
+    }
+  </style>
+</head>
+<body>
+  <div class="stack">
+    <iframe id="frameA" class="layer" allow="autoplay"></iframe>
+    <iframe id="frameB" class="layer" allow="autoplay"></iframe>
+  </div>
+  <!-- Décommente si tu veux l’état :
+  <div id="hud">init…</div>
+  -->
+
+<script>
+/* ========= Réglages ========= */
+const APP_URL       = 'WAVES_SERIE/wave(1).html';
+const SWAP_EVERY_MS = 53000;
+const HOT_TIMEOUT   = 3000;
+const MIC_RESET_MS  = 240000;
+
+/* ========= Boiler d’analyse qui PRIME ========= */
+const FFT_SIZE = 512;              // taille identique entre bandes
+const SENS_GAIN = 1.0;             // préampli neutre (augmente si besoin)
+const NOISE_FLOOR = 0.005, GAIN = 7.0, GAMMA = 0.7;
+const ATTACK = 1.00;
+const RELEASE_BASE = 0.03;
+const SILENCE_GATE = 0.02;
+const SILENCE_FRAMES = 2;
+
+/* ========= DOM ========= */
+const A   = document.getElementById('frameA');
+const B   = document.getElementById('frameB');
+const hud = document.getElementById('hud');
+
+let front = A;   // au-dessus (z=2)
+let back  = B;   // dessous  (z=1)
+let cycle = 0;
+let micRestarts = 0;
+
+const setTop    = el => el.style.zIndex = '2';
+const setBottom = el => el.style.zIndex = '1';
+function hudMsg(extra='') {
+  if (!hud) return;
+  hud.textContent =
+`front: ${front.id} (z=${front.style.zIndex||'2'})
+back : ${back.id}  (z=${back.style.zIndex||'1'})
+cycle: ${cycle}
+mic restarts: ${micRestarts}${extra? '\n'+extra : ''}`;
+}
+
+/* ========= Audio (robuste, filtres par bande, enveloppes snappier) ========= */
+let ctx, streamRef, zeroOut, pre;
+let anLow=[], anM1=[], anM2=[], anHigh=[];
+let bufLow=[], bufM1=[], bufM2=[], bufHigh=[];
+let belowCnt = { low:0, mid1:0, mid2:0, high:0 };
+let bands =   { low:0, mid1:0, mid2:0, high:0 };
+
+let micResetTimerId = null, micRestarting = false;
+
+/* Mesures (RMS + peak) */
+function levelFromBuffer(buf){
+  let s=0, peak=0;
+  for(let i=0;i<buf.length;i++){ const x=buf[i], ax=x<0?-x:x; s+=x*x; if(ax>peak) peak=ax; }
+  const rms = Math.sqrt(s/buf.length);
+  let yR = Math.max(0, (rms - NOISE_FLOOR)) * GAIN; if (yR > 1) yR = 1; yR = Math.pow(yR, GAMMA);
+  let yP = Math.max(0, (peak - NOISE_FLOOR*0.5)) * (GAIN*1.25); if (yP > 1) yP = 1; yP = Math.pow(yP, GAMMA);
+  return Math.max(yR, yP);
+}
+function levelFromAnalyser(an, buf){ an.getFloatTimeDomainData(buf); return levelFromBuffer(buf); }
+function levelFromAnalysersMax(list, buffers){
+  if (!list.length) return 0;
+  let m=0; for(let i=0;i<list.length;i++){ const v=levelFromAnalyser(list[i], buffers[i]); if(v>m) m=v; }
+  return m;
+}
+/* Enveloppe attaq./relâche + gate silence */
+function applyEnv(name, prev, next){
+  if (next < SILENCE_GATE) belowCnt[name]++; else belowCnt[name] = 0;
+  if (belowCnt[name] >= SILENCE_FRAMES) return 0;
+  if (next >= prev) return prev + (next - prev) * ATTACK;
+  const rel = (prev < 0.12) ? 0.50 : (prev < 0.25) ? 0.20 : RELEASE_BASE;
+  return prev + (next - prev) * rel;
+}
+
+/* Construit tout le graphe filtres+analyseurs */
+function buildBandGraph(){
+  anLow=[]; anM1=[]; anM2=[]; anHigh=[];
+  bufLow=[]; bufM1=[]; bufM2=[]; bufHigh=[];
+
+  // LOW robuste
+  const dcCut = ctx.createBiquadFilter(); dcCut.type="highpass"; dcCut.frequency.value=30; dcCut.Q.value=0.707;
+  const lsLow = ctx.createBiquadFilter();  lsLow.type="lowshelf"; lsLow.frequency.value=150; lsLow.gain.value=4;
+  pre.connect(dcCut); dcCut.connect(lsLow);
+  [180,200,230].forEach(f=>{
+    const lp=ctx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=f; lp.Q.value=0.707;
+    lsLow.connect(lp); const an=ctx.createAnalyser(); an.fftSize=FFT_SIZE;
+    lp.connect(an); an.connect(zeroOut); anLow.push(an);
+  });
+
+  // MID1
+  const pkM1 = ctx.createBiquadFilter(); pkM1.type="peaking"; pkM1.frequency.value=500; pkM1.Q.value=0.9; pkM1.gain.value=3;
+  pre.connect(pkM1);
+  [[180,900],[200,1000],[220,1100]].forEach(([fhp,flp])=>{
+    const hp=ctx.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=fhp; hp.Q.value=0.707;
+    const lp=ctx.createBiquadFilter(); lp.type="lowpass";  lp.frequency.value=flp; lp.Q.value=0.707;
+    pkM1.connect(hp); hp.connect(lp); const an=ctx.createAnalyser(); an.fftSize=FFT_SIZE;
+    lp.connect(an); an.connect(zeroOut); anM1.push(an);
+  });
+
+  // MID2
+  const pkM2 = ctx.createBiquadFilter(); pkM2.type="peaking"; pkM2.frequency.value=2000; pkM2.Q.value=0.9; pkM2.gain.value=3;
+  pre.connect(pkM2);
+  [[900,3600],[1000,4000],[1100,4600]].forEach(([fhp,flp])=>{
+    const hp=ctx.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=fhp; hp.Q.value=0.707;
+    const lp=ctx.createBiquadFilter(); lp.type="lowpass";  lp.frequency.value=flp; lp.Q.value=0.707;
+    pkM2.connect(hp); hp.connect(lp); const an=ctx.createAnalyser(); an.fftSize=FFT_SIZE;
+    lp.connect(an); an.connect(zeroOut); anM2.push(an);
+  });
+
+  // HIGH
+  const hsH = ctx.createBiquadFilter(); hsH.type="highshelf"; hsH.frequency.value=5000; hsH.gain.value=6;
+  pre.connect(hsH);
+  [3600,4400,5200].forEach(fhp=>{
+    const hp=ctx.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=fhp; hp.Q.value=0.707;
+    hsH.connect(hp); const an=ctx.createAnalyser(); an.fftSize=FFT_SIZE;
+    hp.connect(an); an.connect(zeroOut); anHigh.push(an);
+  });
+
+  // Buffers
+  bufLow  = anLow .map(a=>new Float32Array(a.fftSize));
+  bufM1   = anM1  .map(a=>new Float32Array(a.fftSize));
+  bufM2   = anM2  .map(a=>new Float32Array(a.fftSize));
+  bufHigh = anHigh.map(a=>new Float32Array(a.fftSize));
+}
+
+async function startAudio(){
+  try {
+    const constraints = {
+      audio: {
+        channelCount: { ideal: 1 },
+        echoCancellation: { ideal: false },
+        noiseSuppression: { ideal: false },
+        autoGainControl: { ideal: false },
+        voiceIsolation: { ideal: false },
+        latency: { ideal: 0 },
+        sampleRate: { ideal: 48000 },
+        sampleSize: { ideal: 16 },
+        advanced: [
+          { echoCancellation: false },
+          { noiseSuppression: false },
+          { autoGainControl: false },
+          { voiceIsolation: false }
+        ]
+      },
+      video: false
+    };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    streamRef = stream;
+
+    // (Safari) applique encore
+    const track = stream.getAudioTracks()[0];
+    if (track?.applyConstraints){
+      try { await track.applyConstraints({ echoCancellation:false, noiseSuppression:false, autoGainControl:false, voiceIsolation:false }); } catch {}
+    }
+
+    ctx = new (window.AudioContext||window.webkitAudioContext)({ latencyHint:"interactive", sampleRate:48000 });
+    const src = ctx.createMediaStreamSource(stream);
+
+    pre = ctx.createGain(); pre.gain.value = SENS_GAIN;
+    zeroOut = ctx.createGain(); zeroOut.gain.value = 0.0; zeroOut.connect(ctx.destination);
+
+    src.connect(pre);
+    buildBandGraph();
+
+    // (Re)lance le timer de reset périodique
+    startMicResetTimer();
+  } catch(e) {
+    // silencieux
+  }
+}
+
+function stopAudio(){
+  try { [...anLow,...anM1,...anM2,...anHigh].forEach(an=>{ try{ an.disconnect(); }catch{} }); } catch {}
+  try { pre?.disconnect(); } catch {}
+  try { zeroOut?.disconnect(); } catch {}
+  if (ctx && ctx.state!=='closed'){ try{ ctx.close(); }catch{} }
+  if (streamRef){ try{ streamRef.getTracks().forEach(t=>t.stop()); }catch{} }
+  ctx=streamRef=pre=zeroOut=null;
+  anLow=anM1=anM2=anHigh=[];
+  bufLow=bufM1=bufM2=bufHigh=[];
+}
+
+async function restartAudio(){
+  if (micRestarting) return;
+  micRestarting = true;
+  stopAudio();           // ⚠️ on ne stoppe PAS la boucle RAF → pas de “trou”
+  micRestarts++; hudMsg();
+  await startAudio();
+  micRestarting = false;
+}
+
+function startMicResetTimer(){
+  if (micResetTimerId) clearInterval(micResetTimerId);
+  micResetTimerId = setInterval(restartAudio, MIC_RESET_MS);
+}
+
+/* ========= Boucle RAF unique (toujours active, même pendant les resets) ========= */
+function tick(){
+  // Si pas de graphe dispo, on décroit vers 0 en douceur (pas de coupure sèche)
+  const L  = anLow .length ? levelFromAnalysersMax(anLow,  bufLow)  : 0;
+  const M1 = anM1  .length ? levelFromAnalysersMax(anM1,   bufM1)   : 0;
+  const M2 = anM2  .length ? levelFromAnalysersMax(anM2,   bufM2)   : 0;
+  const H  = anHigh.length ? levelFromAnalysersMax(anHigh, bufHigh) : 0;
+
+  bands.low  = applyEnv('low',  bands.low,  L);
+  bands.mid1 = applyEnv('mid1', bands.mid1, M1);
+  bands.mid2 = applyEnv('mid2', bands.mid2, M2);
+  bands.high = applyEnv('high', bands.high, H);
+
+  const payload = { type:'bands', low:bands.low, mid1:bands.mid1, mid2:bands.mid2, high:bands.high };
+  front.contentWindow?.postMessage(payload, '*');
+  back .contentWindow?.postMessage(payload, '*');
+
+  requestAnimationFrame(tick);
+}
+
+/* ========= Double buffer iframes ========= */
+function preloadAndHeat(frm){
+  return new Promise(resolve=>{
+    let hot=false;
+    const t = setTimeout(()=>{ if(!hot){ cleanup(); resolve(false); } }, HOT_TIMEOUT);
+    function onMsg(e){
+      if (e.source!==frm.contentWindow) return;
+      if (e.data?.type==='paint-hot'){ hot=true; cleanup(); resolve(true); }
+    }
+    function cleanup(){ clearTimeout(t); window.removeEventListener('message', onMsg); }
+    window.addEventListener('message', onMsg);
+    setBottom(frm);
+    frm.src = APP_URL;
+  });
+}
+
+async function instantSwapToBack(){
+  setTop(back);
+  setBottom(front);
+  [front, back] = [back, front];
+  hudMsg('swap OK');
+}
+
+async function runCycle(){
+  cycle++; hudMsg(`cycle #${cycle}`);
+  await preloadAndHeat(back);
+  await instantSwapToBack();
+  await preloadAndHeat(back);
+}
+
+/* ========= Boot ========= */
+async function start(){
+  requestAnimationFrame(tick);   // boucle visuelle/dispatch toujours active
+  await startAudio();            // démarre la capture + graph
+  await preloadAndHeat(A); setTop(A); setBottom(B); hudMsg('boot → A visible');
+  await preloadAndHeat(B);
+  runCycle();
+  setInterval(runCycle, SWAP_EVERY_MS);
+}
+start();
+</script>
+</body>
+</html>

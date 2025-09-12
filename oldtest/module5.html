@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hydra App — paint-hot gating (no logs)</title>
+  <meta name="theme-color" content="#000000">
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden}
+    canvas{
+      position:fixed; inset:0; width:100vw; height:100vh; display:block;
+      background:#000; /* opaque */
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hydra-synth/dist/hydra-synth.js"></script>
+</head>
+<body>
+<script>
+  // Reçoit les bandes du shell
+  let low=0, mid1=0, mid2=0, high=0;
+  let sLow=0, sMid1=0, sMid2=0, sHigh=0;
+
+  window.addEventListener('message',(e)=>{
+    const d=e.data; if(!d) return;
+    if (d.type==='bands'){
+      low=d.low||0; mid1=d.mid1||0; mid2=d.mid2||0; high=d.high||0;
+    }
+  });
+
+  // Hydra
+  const canvas=document.createElement('canvas');
+  document.body.appendChild(canvas);
+  const hydra=new Hydra({ canvas, detectAudio:false, width:innerWidth, height:innerHeight });
+  function resize(){ canvas.width=innerWidth; canvas.height=innerHeight; hydra.setResolution(innerWidth,innerHeight); }
+  addEventListener('resize', resize); resize();
+
+  /* ===== Lissage attack/release (sans snap-to-zero) ===== */
+  const ATK = 0.55;  // montée
+  const REL = 0.85;  // descente rapide (mais tient la note si le shell fournit > seuil)
+  function smoothAR(x, s){ const k = x < s ? REL : ATK; return s + (x - s) * k; }
+
+  const L  = ()=> (sLow  = smoothAR(low , sLow ), sLow );
+  const M1 = ()=> (sMid1 = smoothAR(mid1, sMid1), sMid1);
+  const M2 = ()=> (sMid2 = smoothAR(mid2, sMid2), sMid2);
+  const H  = ()=> (sHigh = smoothAR(high, sHigh), sHigh);
+
+  /* ===== Patch (identique, couleurs + noise + feedback doux) ===== */
+  function buildPatch(){
+    // Fréquences par bande (+ jitter proportionnel à l’intensité de la bande)
+    const fLow  = () =>  1 + low  * 4  + low  * 5  * (Math.sin(time*0.60)+Math.sin(time*0.60*1.618)) * 0.25;
+    const fM1   = () =>  7 + mid1 * 6  + mid1 * 7  * (Math.sin(time*0.90)+Math.sin(time*0.90*1.618)) * 0.25;
+    const fM2   = () => 13 + mid2 * 7  + mid2 * 9  * (Math.sin(time*1.20)+Math.sin(time*1.20*1.618)) * 0.25;
+    const fHigh = () => 24 + high * 10 + high * 12 * (Math.sin(time*1.60)+Math.sin(time*1.60*1.618)) * 0.25;
+
+    // Couches colorées primaires par bande
+    const red = osc(fLow, 0, 0)
+      .color(() => 0.18 + L()*1.82, 0, 0);
+
+    const green = osc(fM1, 0, 0)
+      .color(0, () => 0.18 + M1()*0.82, 0);
+
+    const blue = osc(fM2, 0, 0)
+      .color(0, 0, () => 0.18 + M2()*0.82);
+
+    // Violet = R+B, plus brillant quand high monte
+    const violet = osc(fHigh, 0, 0)
+      .color(() => 0.28 + H()*0.72, 0.04, () => 0.34 + H()*0.66);
+
+    // Mix additif (base)
+    let mix = red
+      .add(green, 1.0)
+      .add(blue,  1.0)
+      .add(violet,1.0)
+      .saturate(1.08)
+      .contrast(1.03);
+
+    // Champ de noise pour mouvement “organique”
+    const flow = noise(
+      () => 1.5 + (M1() + M2()) * 3.0,
+      () => 0.05 + H() * 0.6
+    );
+
+    // Modulations “noise-driven” + légers scroll/rotate dépendants de l’audio
+    mix = mix
+      .modulate(flow, () => 0.02 + (L()+M1()+M2()+H()) * 0.04)
+      .scrollX(() => (M2() - L())  * 0.005)
+      .scrollY(() => (M1() - H())  * 0.005)
+      .rotate (() =>  M1() * 0.10 + H() * 0.20);
+
+    // Feedback doux (src(o0)) pour persistance du mouvement
+    mix
+      .add(
+        src(o0)
+          .scale  (() => 1.000 + (L()+M1()+M2()+H()) * 0.004)
+          .rotate (() => (H() - M1()) * 0.010)
+          .colorama(() => 0.02 + H() * 0.10)
+          .contrast(1.005),
+        () => 0.17 + (L()+M1()+M2()+H()) * 0.28
+      )
+      .out(o0);
+  }
+
+  buildPatch();
+
+  // “paint-hot” : ≥3 frames + luminance centre > 0.03
+  const ctx2d=document.createElement('canvas').getContext('2d');
+  let frames=0, hot=false;
+  function lumaCenter(){
+    const w=Math.max(4,Math.floor(canvas.width/8));
+    const h=Math.max(4,Math.floor(canvas.height/8));
+    ctx2d.canvas.width=w; ctx2d.canvas.height=h;
+    ctx2d.drawImage(canvas,0,0,w,h);
+    const m = ctx2d.getImageData(w>>1,h>>1,1,1).data;
+    return (0.2126*m[0]+0.7152*m[1]+0.0722*m[2])/255;
+  }
+  function warmLoop(){
+    if (!hot){
+      frames++;
+      const y=lumaCenter();
+      if (frames>=3 && y>0.03){
+        hot=true;
+        try { parent.postMessage({type:'paint-hot'}, '*'); } catch {}
+      } else {
+        requestAnimationFrame(warmLoop);
+      }
+    }
+  }
+  requestAnimationFrame(()=>{ try { parent.postMessage({type:'init-ready'}, '*'); } catch {} });
+  requestAnimationFrame(warmLoop);
+</script>
+</body>
+</html>

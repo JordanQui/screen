@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hydra — mid réactif (200–300 Hz) + silence teinté par LOW</title>
+  <meta name="theme-color" content="#000000">
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden}
+    canvas{position:fixed; inset:0; width:100vw; height:100vh; display:block; background:#000; image-rendering:pixelated}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hydra-synth/dist/hydra-synth.js"></script>
+</head>
+<body>
+<script>
+/* ===== Bands du parent ===== */
+let low=0, mid1=0, mid2=0, high=0;
+addEventListener('message',(e)=>{
+  const d=e.data; if(!d) return;
+  if(d.type==='bands'){ low=d.low||0; mid1=d.mid1||0; mid2=d.mid2||0; high=d.high||0; }
+});
+
+/* ===== Canvas + Hydra (buffers fixes) ===== */
+const canvas=document.createElement('canvas');
+document.body.appendChild(canvas);
+const FIXED_W=Math.max(320, innerWidth), FIXED_H=Math.max(180, innerHeight);
+canvas.width=FIXED_W; canvas.height=FIXED_H;
+const hydra=new Hydra({ canvas, detectAudio:false, width:FIXED_W, height:FIXED_H, makeGlobal:true });
+
+/* ===== Perf (inchangé) ===== */
+const Perf={scale:0.8,targetFPS:60,lowThresh:46,veryLow:38,highThresh:58,graceUpMs:1600,graceDownMs:500,lastUp:performance.now(),lastDown:performance.now(),frames:0,lastTick:performance.now(),perfLevel:1};
+(function(){function t(){Perf.frames++;const n=performance.now();if(n-Perf.lastTick>=500){const f=Perf.frames*1000/(n-Perf.lastTick);Perf.frames=0;Perf.lastTick=n;
+if(f<Perf.veryLow&&n-Perf.lastDown>Perf.graceDownMs){Perf.scale=Math.max(0.40,Perf.scale-0.12);Perf.lastDown=n;}
+else if(f<Perf.lowThresh&&n-Perf.lastDown>Perf.graceDownMs){Perf.scale=Math.max(0.50,Perf.scale-0.08);Perf.lastDown=n;}
+else if(f>Perf.highThresh&&n-Perf.lastUp>Perf.graceUpMs){Perf.scale=Math.min(1.00,Perf.scale+0.08);Perf.lastUp=n;}
+Perf.perfLevel=(Perf.scale>=0.75)?1:0;} requestAnimationFrame(t);} requestAnimationFrame(t);})();
+
+/* ===== Lissage AR “comme le patch de ref” + gains simples ===== */
+let sL=0,sB=0,sG=0,sV=0;
+const ATK=0.60, REL=0.88; // montée / descente rapides
+const smooth=(x,s)=> s + (x - s) * (x < s ? REL : ATK);
+const clamp01=x=>Math.max(0,Math.min(1,x));
+const GAIN={ L:1.6, M1:2.6, M2:2.4, H:2.0 }; // ↑ mid1/mid2 visibles
+
+function L(){ sL=smooth(low ,sL);  return clamp01(sL * GAIN.L ); }
+function M1(){ sB=smooth(mid1,sB);  return clamp01(sB * GAIN.M1); }
+function M2(){ sG=smooth(mid2,sG);  return clamp01(sG * GAIN.M2); }
+function H (){ sV=smooth(high,sV);  return clamp01(sV * GAIN.H ); }
+
+/* —— Cross-feed robuste pour 200–300 Hz —— */
+function M1c(){ return clamp01( M1() + 0.90*L() ); }  // fort: LOW → MID1
+function M2c(){ return clamp01( M2() + 0.25*M1() ); } // léger: MID1 → MID2
+
+/* ===== Energie + gate “band-aware” très permissif ===== */
+const ENG = ()=> clamp01(0.25*L() + 0.30*M1c() + 0.30*M2c() + 0.15*H());
+const actGate = ()=> Math.max( clamp01((ENG()-0.015)/0.06), clamp01((M1c()-0.02)/0.04), clamp01((M2c()-0.02)/0.04), clamp01((H()-0.03)/0.05) );
+const Vg=()=> actGate()*H();
+
+/* ===== Fréquences (jitter proportionnel à la bande comme ton ref) ===== */
+const jitter=(s)=> (Math.sin(time*s)+Math.sin(time*s*1.618))*0.25;
+function fLow (){ return  1 + L()*4  + L()*5  * jitter(0.60); }
+function fM1  (){ return  7 + M1c()*6 + M1c()*7 * jitter(0.90); }
+function fM2  (){ return 13 + M2c()*7 + M2c()*9 * jitter(1.20); }
+function fHigh(){ return 24 + H()*10  + H()*12 * jitter(1.60); }
+
+/* ===== Couleur du silence pilotée par LOW (immobile) ===== */
+function idleRGB(){
+  const t = clamp01(0.80*L() + 0.35*(Math.max(0,low - sL))); // bascule poussé par low instantané
+  const r = 0.40*(1-t) + 0.95*t;
+  const g = 0.10*(1-t) + 0.55*t;
+  const b = 0.70*(1-t) + 0.12*t;
+  return [r,g,b];
+}
+
+/* ===== Signatures MID1 / MID2 (tranchées) ===== */
+function sigMid1(){
+  const scan = osc(()=> 8 + 22*M1c(), ()=> 0.03 + 0.26*M1c(), 0)
+               .kaleid(()=> 3 + Math.floor(6*M1c()));
+  const prism= gradient(1).colorama(()=> 0.12 + 0.34*M1c()).luma(()=> 0.38 + 0.34*M1c());
+  return scan
+    .modulateRotate(prism, ()=> 0.12 + 0.28*M1c() )
+    .modulateScale (prism, ()=> 0.10 + 0.28*M1c() )
+    .posterize( ()=> 4 + Math.floor(4*M1c()), ()=> 0.55 + 0.35*M1c() )
+    .contrast(1.16);
+}
+function sigMid2(){
+  const bands = osc(()=> 2 + 12*M2c(), ()=> 0.03 + 0.28*M2c(), 0).abs();
+  const rings = shape(99, ()=> 0.12 + 0.28*M2c(), ()=> 0.9 - 0.6*M2c())
+                  .rotate(()=> time*0.06*(1+M2c()))
+                  .repeat( ()=> 2 + Math.floor(7*M2c()), ()=> 2 + Math.floor(7*M2c()) );
+  const grid  = voronoi( ()=> 3 + 14*M2c(), ()=> 0.18 + 0.9*M2c(), ()=> 0.35 + 0.45*M2c() );
+  return bands
+    .modulate(rings,      ()=> 0.12 + 0.28*M2c())
+    .modulatePixelate(grid,()=> 0.18 + 0.34*M2c())
+    .posterize( ()=> 4 + Math.floor(5*M2c()), ()=> 0.62 + 0.34*M2c() )
+    .contrast(1.16);
+}
+
+/* ===== HIGH field ===== */
+function fieldHigh(){
+  return noise(()=> 1.8 + 6.2*H(), ()=> 0.06 + 0.60*H())
+         .saturate  ( ()=> 1.04 + 0.26*H() )
+         .contrast  ( ()=> 1.05 + 0.10*H() )
+         .brightness( ()=> -0.06 + 0.18*H() );
+}
+
+/* ===== Patch ===== */
+function buildPatch(){
+  solid(0,0,0,1).out(o0);
+
+  // — IDLE (immobile) — teinté par LOW
+  const [ir,ig,ib]=idleRGB();
+  const idleBase = gradient(1).color(()=>ir,()=>ig,()=>ib).brightness(-0.20).contrast(1.06);
+  const idleBands= gradient(4).thresh(0.62).color(()=>0.65*(1-L())+0.95*L(),()=>0.20*(1-L())+0.55*L(),()=>0.90*(1-L())+0.12*L()).brightness(-0.34).contrast(1.12);
+  const idle = idleBase.add(idleBands,0.18).saturate(1.02).contrast(1.04);
+  const idleAmt = ()=> Math.max(0, 1.0 - 1.10*ENG()); // 1 en silence
+
+  // — Couches simples “à la ref” (primaires par bande) —
+  const red   = osc(()=>fLow (),0,0).color(()=>0.18 + L()  *1.82, 0, 0);
+  const green = osc(()=>fM1  (),0,0).color(0, ()=>0.18 + M1c()*0.82, 0);
+  const blue  = osc(()=>fM2  (),0,0).color(0, 0, ()=>0.18 + M2c()*0.82);
+  const violet= osc(()=>fHigh(),0,0).color(()=>0.28 + H()*0.72, 0.04, ()=>0.34 + H()*0.66);
+
+  // — Signatures distinctes pour mid —
+  const mid1Sig = sigMid1().color(0.10,0.90,1.00);
+  const mid2Sig = sigMid2().color(1.00,0.70,0.10);
+
+  // — Mix —
+  let mix = solid(0,0,0,1)
+    .add(idle, idleAmt)                 // silence immobile teinté par LOW
+    .add(red   , ()=> actGate() * 1.00) // bandes actives
+    .add(green , ()=> actGate() * 1.00)
+    .add(blue  , ()=> actGate() * 1.00)
+    .add(violet, ()=> actGate() * 1.00)
+    // accents mid très visibles
+    .add(mid1Sig, ()=> actGate() * (0.18 + 0.55*M1c()))
+    .add(mid2Sig, ()=> actGate() * (0.18 + 0.55*M2c()));
+
+  // Flow organique (comme ref)
+  const flow = noise(
+    ()=> 1.5 + (M1c()+M2c())*3.0,
+    ()=> 0.05 + H() * 0.6
+  );
+  mix = mix
+    .modulate(flow, ()=> actGate() * (0.02 + (L()+M1c()+M2c()+H())*0.04) )
+    .scrollX ( ()=> actGate() * (M2c() - L()) * 0.005 )
+    .scrollY ( ()=> actGate() * (M1c() - H()) * 0.005 )
+    .rotate  ( ()=> actGate() * ( M1c()*0.10 + H()*0.20 ) );
+
+  // Feedback (sans condition de source)
+  const fb = src(o0)
+    .scale  ( ()=> 1.000 + (L()+M1c()+M2c()+H()) * 0.004 )
+    .rotate ( ()=> (H() - M1c()) * 0.010 )
+    .colorama( ()=> 0.02 + H() * 0.10 )
+    .contrast(1.005);
+
+  mix.add(fb, ()=> actGate() * (0.17 + (L()+M1c()+M2c()+H()) * 0.28)).out(o0);
+}
+buildPatch();
+
+/* ===== Paint-hot minimal ===== */
+const ctx2d=document.createElement('canvas').getContext('2d');
+let frames=0, hot=false;
+function lumaCenter(){
+  const w=Math.max(4,Math.floor(canvas.width/8)), h=Math.max(4,Math.floor(canvas.height/8));
+  ctx2d.canvas.width=w; ctx2d.canvas.height=h; ctx2d.drawImage(canvas,0,0,w,h);
+  const m=ctx2d.getImageData(w>>1,h>>1,1,1).data;
+  return (0.2126*m[0]+0.7152*m[1]+0.0722*m[2])/255;
+}
+function warmLoop(){ if(!hot){ frames++; const y=lumaCenter(); if(frames>=3 && y>0.03){ hot=true; try{ parent.postMessage({type:'paint-hot'}, '*'); }catch{} } else requestAnimationFrame(warmLoop); } }
+requestAnimationFrame(()=>{ try{ parent.postMessage({type:'init-ready'}, '*'); }catch{} });
+requestAnimationFrame(warmLoop);
+</script>
+</body>
+</html>

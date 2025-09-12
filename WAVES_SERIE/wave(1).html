@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Hydra • Module — bands from shell (Hi-DPI, lisse, high++)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <style>
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    canvas { position:fixed; inset:0; width:100vw; height:100vh; display:block; background:#000; }
+  </style>
+  <script src="../hydra/hydra.js"></script>
+</head>
+<body>
+<canvas id="hydra"></canvas>
+<script>
+/* ===== Reçoit les 4 bandes du shell (AUCUN micro ici) ===== */
+let low=0, mid1=0, mid2=0, high=0;
+addEventListener('message',(e)=>{
+  const d=e.data; if(!d) return;
+  if(d.type==='bands'){ low=d.low||0; mid1=d.mid1||0; mid2=d.mid2||0; high=d.high||0; }
+});
+
+/* ===== Hi-DPI ===== */
+const canvas = document.getElementById('hydra');
+function setHiRes(){
+  const dpr = Math.min(3.0, window.devicePixelRatio||1);
+  const w = Math.floor(innerWidth*dpr), h = Math.floor(innerHeight*dpr);
+  canvas.width=w; canvas.height=h;
+  if (window.hydra?.setResolution) window.hydra.setResolution(w,h);
+}
+setHiRes();
+const hydra = new Hydra({ canvas, detectAudio:false, width:canvas.width, height:canvas.height, pixelRatio:1 });
+window.hydra = hydra;
+addEventListener('resize', setHiRes);
+
+/* ===== Aliases ===== */
+const L  = () => low;
+const M1 = () => mid1;
+const M2 = () => mid2;
+const Hh = () => high;
+
+/* ===== Patch visuel — lisse, sans rotate/scale en feedback, aigus boostés mais plafonnés ===== */
+function buildPatch(){
+  const Hsoft = () => Math.pow(Hh(), 0.72);
+
+  const fLow  = () =>  8 + L()*22 + (L()*3.0)*(Math.sin(time*0.90)+Math.sin(time*1.457))*0.5;
+  const fM1   = () => 11 + M1()* 8 + (M1()*2.4)*(Math.sin(time*1.00)+Math.sin(time*1.618))*0.5;
+  const fM2   = () => 15 + M2()*10 + (M2()*2.8)*(Math.sin(time*1.20)+Math.sin(time*1.946))*0.5;
+  const fHigh = () => Math.min(18 + Hsoft()*28 + (Hsoft()*3.2)*(Math.sin(time*1.9)+Math.sin(time*2.89))*0.5, 34);
+
+  const red   = osc(fLow,  0, 0).color(() => 0.12 + L()*0.88, 0, 0);
+  const green = osc(fM1,   0, 0).color(0, () => 0.18 + M1()*0.82, 0);
+  const blue  = osc(fM2,   0, 0).color(0, 0, () => 0.18 + M2()*0.82);
+
+  const white = osc(fHigh, 0, 0)
+    .modulate(
+      noise(
+        () => 1.2 + Hsoft()*7.0,
+        () => 0.12 + Hsoft()*0.45
+      ),
+      () => 0.012 + Hsoft()*0.050
+    )
+    .color(
+      () => 0.12 + Math.min(1.00, Hsoft()*1.10),
+      () => 0.12 + Math.min(1.00, Hsoft()*1.10),
+      () => 0.12 + Math.min(1.00, Hsoft()*1.10)
+    );
+
+  let mix = red.add(green,0.95).add(blue,0.95).add(white,0.95)
+               .saturate(1.02).contrast(1.01);
+
+  const flow = noise(
+    () => 1.3 + (M1()+M2()+Hh())*2.4,
+    () => 0.06 + Hh()*0.45
+  );
+  mix = mix.modulate(flow, () => 0.012 + (L()+M1()+M2())*0.018 + Hsoft()*0.030)
+           .scrollX(() => (M2()-L())*0.003)
+           .scrollY(() => (M1()-Hh())*0.003);
+
+  const fbAmt = () => Math.min(0.45, 0.12 + (L()+M1()+M2())*0.20 + Hsoft()*0.18);
+  mix = mix.blend(
+    src(o0)
+      .colorama(() => 0.010 + Hh()*0.040)
+      .contrast(1.001),
+    fbAmt
+  ).out(o0);
+}
+buildPatch();
+render(o0);
+
+/* ===== Signale “paint-hot” au shell dès que ça dessine ===== */
+requestAnimationFrame(()=> parent.postMessage({type:'paint-hot'}, '*'));
+</script>
+</body>
+</html>
+

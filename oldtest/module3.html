@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hydra — perf+ (auto-res, champs adaptatifs, FB smart)</title>
+  <meta name="theme-color" content="#000000">
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden}
+    canvas{position:fixed; inset:0; width:100vw; height:100vh; display:block; background:#000; image-rendering:pixelated}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hydra-synth/dist/hydra-synth.js"></script>
+</head>
+<body>
+<script>
+/* ====== Bandes depuis le parent ====== */
+let low=0, mid1=0, mid2=0, high=0;
+addEventListener('message',(e)=>{
+  const d=e.data; if(!d) return;
+  if(d.type==='bands'){ low=d.low||0; mid1=d.mid1||0; mid2=d.mid2||0; high=d.high||0; }
+});
+
+/* ====== Canvas + Hydra (auto-res) ====== */
+const canvas=document.createElement('canvas');
+document.body.appendChild(canvas);
+const hydra=new Hydra({ canvas, detectAudio:false, width:innerWidth, height:innerHeight, makeGlobal:true });
+
+function setHydraResolution(scale=1){
+  const w=Math.max(320, Math.floor(innerWidth*scale));
+  const h=Math.max(180, Math.floor(innerHeight*scale));
+  hydra.setResolution(w,h);
+}
+function resize(){ canvas.width=innerWidth; canvas.height=innerHeight; setHydraResolution(Perf.scale); }
+addEventListener('resize', resize);
+
+/* ====== Perf monitor (auto downscale) ====== */
+const Perf={
+  scale: 0.8,              // départ un peu en dessous du plein écran
+  targetFPS: 60,
+  lowThresh: 46,           // seuils d'ajustement
+  veryLow: 38,
+  highThresh: 58,
+  graceUpMs: 1600,
+  graceDownMs: 500,
+  lastUp: performance.now(),
+  lastDown: performance.now(),
+  frames:0, lastTick:performance.now(),
+  perfLevel: 1             // 0 = léger, 1 = normal (monte/descend avec scale)
+};
+setHydraResolution(Perf.scale); resize();
+
+/* Compteur FPS + ajustements */
+(function trackFPS(){
+  Perf.frames++;
+  const t=performance.now();
+  if(t-Perf.lastTick>=500){ // demi-seconde
+    const fps = (Perf.frames*1000)/(t-Perf.lastTick);
+    Perf.frames=0; Perf.lastTick=t;
+
+    // Ajuste l’échelle
+    if(fps < Perf.veryLow && (t-Perf.lastDown)>Perf.graceDownMs){
+      Perf.scale = Math.max(0.40, Perf.scale-0.12);
+      Perf.lastDown=t; setHydraResolution(Perf.scale);
+    } else if(fps < Perf.lowThresh && (t-Perf.lastDown)>Perf.graceDownMs){
+      Perf.scale = Math.max(0.50, Perf.scale-0.08);
+      Perf.lastDown=t; setHydraResolution(Perf.scale);
+    } else if(fps > Perf.highThresh && (t-Perf.lastUp)>Perf.graceUpMs){
+      Perf.scale = Math.min(1.00, Perf.scale+0.08);
+      Perf.lastUp=t; setHydraResolution(Perf.scale);
+    }
+
+    // Niveau de complexité visuelle en fonction de l’échelle
+    Perf.perfLevel = (Perf.scale >= 0.75) ? 1 : 0;
+  }
+  requestAnimationFrame(trackFPS);
+})();
+
+/* ====== Enveloppes + transients (inchangé, léger tuning) ====== */
+const ECONF = {
+  L:{ATK:0.90, REL:0.65, gamma:0.80, sens:2.10, imp:3.8},
+  B:{ATK:0.90, REL:0.70, gamma:0.72, sens:2.10, imp:2.6},
+  G:{ATK:0.90, REL:0.70, gamma:0.72, sens:2.10, imp:2.6},
+  V:{ATK:0.96, REL:0.78, gamma:0.70, sens:2.40, imp:11.0}
+};
+let sL=0,sB=0,sG=0,sV=0, pL=0,pB=0,pG=0,pV=0;
+const smoothAR=(x,s,a,r)=> s + (x - s) * (x < s ? r : a);
+const compand=(x,g,s)=> Math.min(1, Math.pow(Math.max(0,x), g) * s);
+
+function stepEnv(){
+  pL=sL; pB=sB; pG=sG; pV=sV;
+  sL=smoothAR(low ,sL,ECONF.L.ATK,ECONF.L.REL);
+  sB=smoothAR(mid1,sB,ECONF.B.ATK,ECONF.B.REL);
+  sG=smoothAR(mid2,sG,ECONF.G.ATK,ECONF.G.REL);
+  sV=smoothAR(high,sV,ECONF.V.ATK,ECONF.V.REL);
+  requestAnimationFrame(stepEnv);
+}
+requestAnimationFrame(stepEnv);
+
+const L=()=>compand(sL,ECONF.L.gamma,ECONF.L.sens);
+const B=()=>compand(sB,ECONF.B.gamma,ECONF.B.sens);
+const G=()=>compand(sG,ECONF.G.gamma,ECONF.G.sens);
+const V=()=>compand(sV,ECONF.V.gamma,ECONF.V.sens);
+const iL=()=>Math.min(1, Math.max(0,sL-pL)*ECONF.L.imp);
+const iB=()=>Math.min(1, Math.max(0,sB-pB)*ECONF.B.imp);
+const iG=()=>Math.min(1, Math.max(0,sG-pG)*ECONF.G.imp);
+const iV=()=>Math.min(1, Math.max(0,sV-pV)*ECONF.V.imp);
+
+const BASE_GLOW = 0.012;               // bloom plus faible
+const ENG=()=> Math.min(1, 0.80*(L()+B()+G()+V()) );
+
+/* ====== Fréquences (petit micro-jitter) ====== */
+function fLow (){ return  2 + L()*6  + L()*6  * Math.sin(time*0.60)*0.28; }
+function fBlue(){ return  8 + B()*8  + B()*9  * Math.sin(time*0.95)*0.26; }
+function fGreen(){return 13 + G()*9  + G()*10 * Math.sin(time*1.09)*0.26; }
+function fHigh(){ return 26 + V()*16 + V()*18 * Math.sin(time*1.60)*0.30; }
+
+/* ====== Champs adaptatifs (lourd vs léger) ====== */
+function fieldBlue(){
+  if(Perf.perfLevel===0){
+    // version légère
+    return noise(()=>1.0+2.2*B(), ()=>0.12+0.28*B()).contrast(1.05);
+  }
+  // version riche
+  const n = noise(()=>1.0+3.0*B(), ()=>0.10+0.42*B());
+  return n.modulateScale( noise(()=>0.7+1.8*B(), ()=>0.06+0.34*B()), ()=>0.10+0.22*B() ).contrast(1.08);
+}
+function fieldGreen(){
+  if(Perf.perfLevel===0){
+    // version légère
+    return noise(()=>1.0+2.2*G(), ()=>0.12+0.28*G()).contrast(1.06);
+  }
+  // version riche
+  const n = noise(()=>1.0+2.8*G(), ()=>0.10+0.40*G());
+  return n.modulatePixelate( noise(()=>0.8+2.0*G(), ()=>0.06+0.30*G()), ()=>8+56*G() ).contrast(1.10);
+}
+function fieldHigh(){
+  // toujours un peu nerveux mais borné
+  return noise(()=> 2.0 + 6.0*(V()+iV()), ()=> 0.10 + 0.56*V())
+         .saturate  ( ()=> 1.04 + 0.26*iV() )
+         .contrast  ( ()=> 1.05 + 0.10*iV() )
+         .brightness( ()=> -0.10 + 0.16*iV() );
+}
+
+/* ====== Patch ====== */
+function buildPatch(){
+  solid(0,0,0,1).out(o0);
+
+  const idleViolet = osc(10, 0, 0).color(0.46, 0.08, 0.92).brightness(-0.22).contrast(1.03);
+  const idleAmt = ()=> Math.max(0, 1.0 - 1.10*ENG());
+
+  // LOW
+  const lowBase = osc(()=>fLow(), 0, 0).color( ()=>0.50 + 0.45*L(), 0.12, ()=>0.70 + 0.30*L() );
+  const lowRipple = osc(()=> 3 + 12*L(), ()=> 0.03 + 0.18*L(), 0)
+    .modulate( noise(()=>1.1+1.8*L(), ()=>0.10+0.26*L()), ()=> 0.07*(0.5+L()) )
+    .contrast(1.05);
+  const lowNode = lowBase
+    .add( lowRipple.color(0.52,0.16,0.92), ()=> 0.18 + 0.34*(L()+iL()) )
+    .saturate ( ()=> 1.02 + 0.14*(L()+iL()) )
+    .contrast ( ()=> 1.01 + 0.05*(L()+iL()) );
+
+  // MID1 (cyan)
+  const blueBase = osc(()=>fBlue(), 0, 0).color( 0.05, ()=>0.65 + 0.30*B(), ()=>0.82 + 0.18*B() );
+  const blueNode = blueBase
+    .modulate( fieldBlue(), ()=> 0.12 + 0.20*B() )
+    .saturate( ()=> 1.02 + 0.16*(B()+iB()) )
+    .contrast( ()=> 1.05 + 0.05*(B()+iB()) );
+
+  // MID2 (lime)
+  const greenBase = osc(()=>fGreen(), 0, 0).color( ()=>0.45 + 0.25*G(), ()=>0.85 + 0.15*G(), ()=>0.05 + 0.10*G() );
+  const greenNode = greenBase
+    .modulate( fieldGreen(), ()=> 0.12 + 0.20*G() )
+    .saturate( ()=> 1.02 + 0.16*(G()+iG()) )
+    .contrast( ()=> 1.05 + 0.05*(G()+iG()) );
+
+  // HIGH (violet)
+  const violetBase = osc(()=>fHigh(), 0, 0).color(
+    ()=>0.40 + 0.60*V() + 0.22*iV(),
+    ()=>0.06 + 0.04*iV(),
+    ()=>0.46 + 0.54*V() + 0.28*iV()
+  );
+  const highNode = violetBase
+    .modulate( fieldHigh(), ()=> 0.10 + 0.24*(V()+iV()) )
+    .saturate ( ()=> 1.05 + 0.24*iV() )
+    .contrast ( ()=> 1.07 + 0.08*iV() )
+    .brightness( ()=> 0.02 + 0.14*iV() );
+
+  // Poids (bloom bas + highs un peu ↑)
+  const wL = ()=> BASE_GLOW*0.6 + 1.35*L();
+  const wB = ()=> BASE_GLOW*0.3 + 0.98*B();
+  const wG = ()=> BASE_GLOW*0.3 + 0.98*G();
+  const wV = ()=> BASE_GLOW*0.2 + 1.32*V();
+
+  let mix = solid(0,0,0,1)
+    .add(idleViolet, idleAmt)
+    .add(lowNode , wL)
+    .add(blueNode, wB)
+    .add(greenNode, wG)
+    .add(highNode, wV);
+
+  // Flow global (désactivé si perf faible ou faible énergie)
+  const enableFlow = ()=> (Perf.perfLevel===1) && (ENG()>0.12);
+  const flow = noise( ()=> 1.3 + 2.2*(B()+G()) + 0.8*L(), ()=> 0.08 + 0.50*V() );
+  mix = mix
+    .modulate(flow, ()=> enableFlow()? (0.012 + 0.032*(BASE_GLOW + ENG())) : 0 )
+    .scrollX ( ()=> (G()-L()) * (enableFlow()? 0.0035 : 0.002) )
+    .scrollY ( ()=> (B()-V()) * (enableFlow()? 0.0035 : 0.002) );
+
+  // Gate visuelle
+  mix = mix
+    .saturate ( ()=> 1.00 + 0.30*(BASE_GLOW + ENG()) )
+    .contrast ( ()=> 1.03 + 0.10*(BASE_GLOW + ENG()) )
+    .brightness( ()=> -0.10 + 0.45*(BASE_GLOW + ENG()) );
+
+  // Feedback smart : on bypasse sous charge ou à faible ENG
+  const fbAmt = ()=> (Perf.perfLevel===1 && ENG()>0.10) ? (0.05 + 0.12*(BASE_GLOW + ENG())) : 0;
+  mix
+    .add(
+      src(o0)
+        .scale  (()=> 1.000 + (Perf.perfLevel===1 ? 0.0012*(BASE_GLOW + ENG()) : 0.0006*(BASE_GLOW + ENG())))
+        .colorama(()=> (Perf.perfLevel===1 ? 0.012 + 0.035*V()*(BASE_GLOW + ENG()) : 0.006 + 0.018*V()*(BASE_GLOW + ENG())))
+        .contrast(1.002),
+      fbAmt
+    )
+    .out(o0);
+}
+buildPatch();
+
+/* ====== Paint-hot minimal (stoppe après succès) ====== */
+const ctx2d=document.createElement('canvas').getContext('2d');
+let frames=0, hot=false;
+function lumaCenter(){
+  const w=Math.max(4,Math.floor(canvas.width/8));
+  const h=Math.max(4,Math.floor(canvas.height/8));
+  ctx2d.canvas.width=w; ctx2d.canvas.height=h;
+  ctx2d.drawImage(canvas,0,0,w,h);
+  const m=ctx2d.getImageData(w>>1,h>>1,1,1).data;
+  return (0.2126*m[0]+0.7152*m[1]+0.0722*m[2])/255;
+}
+function warmLoop(){
+  if(!hot){
+    frames++;
+    const y=lumaCenter();
+    if(frames>=3 && y>0.03){
+      hot=true; try{ parent.postMessage({type:'paint-hot'}, '*'); }catch{}
+    } else { requestAnimationFrame(warmLoop); }
+  }
+}
+requestAnimationFrame(()=>{ try{ parent.postMessage({type:'init-ready'}, '*'); }catch{} });
+requestAnimationFrame(warmLoop);
+</script>
+</body>
+</html>

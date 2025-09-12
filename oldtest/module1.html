@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hydra App — basses rouges, mid1 vert, mid2 bleu, high violet</title>
+  <meta name="theme-color" content="#000000">
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden}
+    canvas{
+      position:fixed; inset:0; width:100vw; height:100vh; display:block;
+      background:#000; /* opaque */
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hydra-synth/dist/hydra-synth.js"></script>
+</head>
+<body>
+<script>
+  // --- bandes reçues du shell ---
+  let low=0, mid1=0, mid2=0, high=0;
+  window.addEventListener('message',(e)=>{
+    const d=e.data; if(!d) return;
+    if (d.type==='bands'){
+      low=d.low||0; mid1=d.mid1||0; mid2=d.mid2||0; high=d.high||0;
+    }
+  });
+
+  // --- Hydra / canvas ---
+  const canvas=document.createElement('canvas');
+  document.body.appendChild(canvas);
+  const hydra=new Hydra({ canvas, detectAudio:false, width:innerWidth, height:innerHeight });
+  function resize(){ canvas.width=innerWidth; canvas.height=innerHeight; hydra.setResolution(innerWidth,innerHeight); }
+  addEventListener('resize', resize); resize();
+
+  // --- Lissage attack/release (réactif, tient la note) ---
+  let sLow=0, sMid1=0, sMid2=0, sHigh=0;
+  const ATK = 0.55, REL = 0.85; // montée / descente
+  function smoothAR(x, s){ const k = x < s ? REL : ATK; return s + (x - s) * k; }
+  const L  = ()=> (sLow  = smoothAR(low , sLow ), sLow );
+  const M1 = ()=> (sMid1 = smoothAR(mid1, sMid1), sMid1);
+  const M2 = ()=> (sMid2 = smoothAR(mid2, sMid2), sMid2);
+  const H  = ()=> (sHigh = smoothAR(high, sHigh), sHigh);
+
+  // --- Patch principal ---
+  function buildPatch(){
+    // Fréquences par bande (+ jitter proportionnel)
+    const fLow  = () =>  8 + L()*22 + (L()*3.0) * (Math.sin(time*0.90)+Math.sin(time*1.457)) * 0.5;  // rouge réactif
+    const fM1   = () => 11 + M1()* 8 + (M1()*2.4) * (Math.sin(time*1.00)+Math.sin(time*1.618)) * 0.5;
+    const fM2   = () => 15 + M2()*10 + (M2()*2.8) * (Math.sin(time*1.20)+Math.sin(time*1.946)) * 0.5;
+    const fHigh = () => 24 + H ()*14 + (H ()*3.2) * (Math.sin(time*1.60)+Math.sin(time*2.589)) * 0.5;
+
+    // Couches colorées
+    const red = osc(fLow, 0, 0)      // low → ROUGE
+      .color(() => 0.18 + L()*0.82, 0, 0);
+
+    const green = osc(fM1, 0, 0)     // mid1 → VERT
+      .color(0, () => 0.18 + M1()*0.82, 0);
+
+    const blue = osc(fM2, 0, 0)      // mid2 → BLEU
+      .color(0, 0, () => 0.18 + M2()*0.82);
+
+    const violet = osc(fHigh, 0, 0)  // high → VIOLET (R+B)
+      .color(() => 0.24 + H()*0.70, 0.04, () => 0.32 + H()*0.68);
+
+    // Mix additif + léger “grain” organique
+    let mix = red
+      .add(green, 0.95)
+      .add(blue,  0.95)
+      .add(violet,0.95)
+      .saturate(1.04)
+      .contrast(1.02);
+
+    const flow = noise(
+      () => 1.4 + (M1()+M2())*2.6,
+      () => 0.05 + H()*0.5
+    );
+
+    mix = mix
+      .modulate(flow, () => 0.012 + (L()+M1()+M2()+H()) * 0.02)
+      .scrollX(() => (M2() - L())  * 0.004)
+      .scrollY(() => (M1() - H())  * 0.004)
+      .rotate (() =>  M1()*0.08 + H()*0.16);
+
+    // Feedback doux (persistance sans emballement)
+    mix
+      .add(
+        src(o0)
+          .scale  (() => 1.000 + (L()+M1()+M2()+H()) * 0.003)
+          .rotate (() => (H()-M1()) * 0.008)
+          .colorama(() => 0.02 + H()*0.08)
+          .contrast(1.004),
+        () => 0.14 + (L()+M1()+M2()+H()) * 0.22
+      )
+      .out(o0);
+  }
+  buildPatch();
+
+  // --- “paint-hot” : ≥3 frames + luminance centre > 0.03 (pour le shell) ---
+  const ctx2d=document.createElement('canvas').getContext('2d');
+  let frames=0, hot=false;
+  function lumaCenter(){
+    const w=Math.max(4,Math.floor(canvas.width/8));
+    const h=Math.max(4,Math.floor(canvas.height/8));
+    ctx2d.canvas.width=w; ctx2d.canvas.height=h;
+    ctx2d.drawImage(canvas,0,0,w,h);
+    const m = ctx2d.getImageData(w>>1,h>>1,1,1).data;
+    return (0.2126*m[0]+0.7152*m[1]+0.0722*m[2])/255;
+  }
+  function warmLoop(){
+    if (!hot){
+      frames++;
+      const y=lumaCenter();
+      if (frames>=3 && y>0.03){
+        hot=true;
+        try { parent.postMessage({type:'paint-hot'}, '*'); } catch {}
+      } else {
+        requestAnimationFrame(warmLoop);
+      }
+    }
+  }
+  requestAnimationFrame(()=>{ try { parent.postMessage({type:'init-ready'}, '*'); } catch {} });
+  requestAnimationFrame(warmLoop);
+</script>
+</body>
+</html>

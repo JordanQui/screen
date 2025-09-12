@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Hydra Shell — instant swap + mic reset + raw mic + sensitivity</title>
+  <meta name="theme-color" content="#000000">
+  <style>
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    .stack { position:fixed; inset:0; display:grid; place-items:stretch; background:#000; }
+    .layer {
+      grid-area:1/1; border:0; width:100%; height:100%;
+      background:#000; z-index:1; /* la frame au-dessus passe à z=2 */
+    }
+    #hud {
+      position:fixed; left:8px; bottom:8px; color:#0f0;
+      font:12px ui-monospace, Menlo, Consolas, monospace;
+      background:#000a; padding:6px 8px; border-radius:6px; white-space:pre; pointer-events:none;
+    }
+  </style>
+</head>
+<body>
+  <div class="stack">
+    <iframe id="frameA" class="layer" allow="autoplay"></iframe>
+    <iframe id="frameB" class="layer" allow="autoplay"></iframe>
+  </div>
+  <!-- Décommente pour afficher l’état :
+  <div id="hud">init…</div>
+  -->
+
+  <script>
+  /* ========= Réglages ========= */
+  const APP_URL       = 'module1.html';
+  const SWAP_EVERY_MS = 888000;
+  const HOT_TIMEOUT   = 3000;
+  const FFT_SIZE      = 256;
+
+  // Sensibilité / seuil
+  const SENS_GAIN     = 3.0;   // boost d'entrée (1.0 = neutre)
+  const THRESH        = 0.1;   // seuil doux
+
+  const MIC_RESET_MS  = 33000; // 33s (si tu veux 4min -> 240000)
+
+  /* ========= DOM ========= */
+  const A   = document.getElementById('frameA');
+  const B   = document.getElementById('frameB');
+  const hud = document.getElementById('hud');
+
+  let front = A;   // au-dessus (z=2)
+  let back  = B;   // dessous  (z=1)
+  let cycle = 0;
+  let micRestarts = 0;
+
+  const setTop    = el => el.style.zIndex = '2';
+  const setBottom = el => el.style.zIndex = '1';
+  function hudMsg(extra='') {
+    if (!hud) return;
+    hud.textContent =
+`front: ${front.id} (z=${front.style.zIndex||'2'})
+back : ${back.id}  (z=${back.style.zIndex||'1'})
+cycle: ${cycle}
+mic restarts: ${micRestarts}${extra? '\n'+extra : ''}`;
+  }
+
+  /* ========= Audio ========= */
+  let audioCtx, analyser, data, rafBands, streamRef, preGain;
+  let micResetTimerId = null, micRestarting = false;
+
+  async function startAudio() {
+    try {
+      const constraints = {
+        audio: {
+          echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+          googEchoCancellation: false, googNoiseSuppression: false, googAutoGainControl: false,
+          channelCount: 1, latency: 0, sampleRate: 48000, sampleSize: 16
+        },
+        video: false
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const track = stream.getAudioTracks()[0];
+      if (track?.applyConstraints) {
+        try { await track.applyConstraints({ advanced: [{ echoCancellation:false, noiseSuppression:false, autoGainControl:false }] }); } catch {}
+      }
+
+      streamRef = stream;
+
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = audioCtx.createMediaStreamSource(stream);
+
+      preGain = audioCtx.createGain();
+      preGain.gain.value = SENS_GAIN;
+
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = FFT_SIZE;
+      analyser.smoothingTimeConstant = 0.12;
+      analyser.minDecibels = -100;
+      analyser.maxDecibels = -10;
+
+      src.connect(preGain);
+      preGain.connect(analyser);
+
+      data = new Uint8Array(analyser.frequencyBinCount);
+
+      const avg = (s, e) => { let S = 0; for (let i=s; i<=e; i++) S += data[i]; return (S / (e - s + 1)) / 255; };
+
+      const tick = () => {
+        if (audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+        analyser.getByteFrequencyData(data);
+
+        const n = data.length, q1 = Math.floor(n*0.25)-1, q2 = Math.floor(n*0.5)-1, q3 = Math.floor(n*0.75)-1;
+        const lowRaw  = avg(0, q1);
+        const m1Raw   = avg(q1+1, q2);
+        const m2Raw   = avg(q2+1, q3);
+        const highRaw = avg(q3+1, n-1);
+
+        const low  = lowRaw  < THRESH ? 0 : lowRaw;
+        const m1   = m1Raw   < THRESH ? 0 : m1Raw;
+        const m2   = m2Raw   < THRESH ? 0 : m2Raw;
+        const high = highRaw < THRESH ? 0 : highRaw;
+
+        const payload = { type:'bands', low, mid1:m1, mid2:m2, high };
+        front.contentWindow?.postMessage(payload, '*');
+        back .contentWindow?.postMessage(payload, '*');
+
+        rafBands = requestAnimationFrame(tick);
+      };
+      rafBands = requestAnimationFrame(tick);
+
+      startMicResetTimer();
+    } catch(e) { /* silencieux */ }
+  }
+
+  function stopAudio() {
+    if (rafBands) cancelAnimationFrame(rafBands), rafBands=null;
+    try { analyser?.disconnect(); } catch {}
+    try { preGain?.disconnect(); } catch {}
+    if (audioCtx && audioCtx.state !== 'closed') { try { audioCtx.close(); } catch {} }
+    try { streamRef?.getTracks().forEach(t => t.stop()); } catch {}
+    audioCtx = analyser = preGain = data = streamRef = null;
+  }
+
+  async function restartAudio() {
+    if (micRestarting) return;
+    micRestarting = true;
+    stopAudio();
+    micRestarts++;
+    hudMsg();
+    await startAudio();
+    micRestarting = false;
+  }
+
+  function startMicResetTimer() {
+    if (micResetTimerId) clearInterval(micResetTimerId);
+    micResetTimerId = setInterval(restartAudio, MIC_RESET_MS);
+  }
+
+  /* ========= Double buffer iframes ========= */
+  function preloadAndHeat(frm) {
+    return new Promise(resolve => {
+      let hot = false;
+      const t = setTimeout(() => { if (!hot) { cleanup(); resolve(false); } }, HOT_TIMEOUT);
+
+      function onMsg(e) {
+        if (e.source !== frm.contentWindow) return;
+        if (e.data?.type === 'paint-hot') { hot = true; cleanup(); resolve(true); }
+      }
+      function cleanup() {
+        clearTimeout(t);
+        window.removeEventListener('message', onMsg);
+      }
+
+      window.addEventListener('message', onMsg);
+      setBottom(frm);
+      frm.src = APP_URL;
+    });
+  }
+
+  async function instantSwapToBack() {
+    setTop(back);
+    setBottom(front);
+    [front, back] = [back, front];
+    hudMsg('swap OK');
+  }
+
+  async function runCycle() {
+    cycle++; hudMsg(`cycle #${cycle}`);
+    await preloadAndHeat(back);
+    await instantSwapToBack();
+    await preloadAndHeat(back);
+  }
+
+  /* ========= Boot ========= */
+  async function start() {
+    await startAudio();
+    await preloadAndHeat(A); setTop(A); setBottom(B); hudMsg('boot → A visible');
+    await preloadAndHeat(B);
+    runCycle();
+    setInterval(runCycle, SWAP_EVERY_MS);
+  }
+
+  start();
+  </script>
+</body>
+</html>

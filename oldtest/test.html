@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hydra App — paint-hot gating (no logs)</title>
+  <meta name="theme-color" content="#000000">
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden}
+    canvas{
+      position:fixed; inset:0; width:100vw; height:100vh; display:block;
+      background:#000; /* opaque */
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hydra-synth/dist/hydra-synth.js"></script>
+</head>
+<body>
+<script>
+  // Reçoit les bandes du shell
+  let low=0, mid1=0, mid2=0, high=0;
+  let sLow=0, sMid1=0, sMid2=0, sHigh=0;
+  const SMOOTH=0.22;
+
+  window.addEventListener('message',(e)=>{
+    const d=e.data; if(!d) return;
+    if (d.type==='bands'){
+      low=d.low||0; mid1=d.mid1||0; mid2=d.mid2||0; high=d.high||0;
+    }
+  });
+
+  // Hydra
+  const canvas=document.createElement('canvas');
+  document.body.appendChild(canvas);
+  const hydra=new Hydra({ canvas, detectAudio:false, width:innerWidth, height:innerHeight });
+  function resize(){ canvas.width=innerWidth; canvas.height=innerHeight; hydra.setResolution(innerWidth,innerHeight); }
+  addEventListener('resize', resize); resize();
+
+  // --- helpers bande lissées (si pas déjà définies) ---
+  let sLow=0, sMid1=0, sMid2=0, sHigh=0;
+  const SMOOTH = 0.22;
+  const L  = ()=> (sLow  += (low  - sLow )*SMOOTH,  sLow );
+  const M1 = ()=> (sMid1 += (mid1 - sMid1)*SMOOTH, sMid1);
+  const M2 = ()=> (sMid2 += (mid2 - sMid2)*SMOOTH, sMid2);
+  const H  = ()=> (sHigh += (high - sHigh)*SMOOTH, sHigh);
+
+  // jitter : amplitude = intensité de la bande, vitesse selon la bande
+  const J = (ampFn, speed, span) => () =>
+    ampFn() * span * ( Math.sin(time*speed) + Math.sin(time*speed*1.618) ) * 0.5;
+
+  // *** PATCH DEMANDÉ ***
+  function buildPatch(){
+    // fréquences (low → high) + jitter dont l’amplitude suit l’intensité
+    const fLow  = () =>  2 + L()  * 4  + J(L , 0.6,  5)();
+    const fM1   = () =>  7 + M1() * 6  + J(M1, 0.9,  7)();
+    const fM2   = () => 13 + M2() * 7  + J(M2, 1.2,  9)();
+    const fHigh = () => 24 + H()  * 10 + J(H , 1.6, 12)();
+
+    // couches colorées : R / G / B / violet (R+B)
+    const lowRed = osc(fLow, 0.08, 0)
+      .color(() => 0.15 + L()*0.85, 0, 0);
+
+    const midGreen = osc(fM1, 0.10, 0)
+      .color(0, () => 0.15 + M1()*0.85, 0);
+
+    const midBlue = osc(fM2, 0.12, 0)
+      .color(0, 0, () => 0.15 + M2()*0.85);
+
+    const highViolet = osc(fHigh, 0.14, 0)
+      .color(
+        () => 0.25 + H()*0.75,  // R
+        0.05,                    // un soupçon de G pour éviter le noir pur
+        () => 0.35 + H()*0.65   // B
+      );
+
+    // composition additive douce
+    lowRed
+      .add(midGreen, 1.0)
+      .add(midBlue,  1.0)
+      .add(highViolet, 1.0)
+      .contrast(1.05)
+      .out();
+  }
+  buildPatch();
+
+  // “paint-hot” : ≥3 frames + luminance centre > 0.03
+  const ctx2d=document.createElement('canvas').getContext('2d');
+  let frames=0, hot=false;
+  function lumaCenter(){
+    const w=Math.max(4,Math.floor(canvas.width/8));
+    const h=Math.max(4,Math.floor(canvas.height/8));
+    ctx2d.canvas.width=w; ctx2d.canvas.height=h;
+    ctx2d.drawImage(canvas,0,0,w,h);
+    const m = ctx2d.getImageData(w>>1,h>>1,1,1).data;
+    return (0.2126*m[0]+0.7152*m[1]+0.0722*m[2])/255;
+  }
+  function warmLoop(){
+    if (!hot){
+      frames++;
+      const y=lumaCenter();
+      if (frames>=3 && y>0.03){
+        hot=true;
+        try { parent.postMessage({type:'paint-hot'}, '*'); } catch {}
+      } else {
+        requestAnimationFrame(warmLoop);
+      }
+    }
+  }
+  requestAnimationFrame(()=>{ try { parent.postMessage({type:'init-ready'}, '*'); } catch {} });
+  requestAnimationFrame(warmLoop);
+</script>
+</body>
+</html>
