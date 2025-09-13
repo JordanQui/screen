@@ -178,7 +178,7 @@ function buildPatch(){
     .modulate(M_2, I.C4_M2)
     .modulate(noise(2.2, 0.22), I.C4_NO)
     .mult(mask)
-    .scale(1.8)
+    .scale(2.5)
     .color(
       () => P.col.C4_min[0] + Math.min(1.0, SH()*P.col.C4_add[0]),
       () => P.col.C4_min[1] + Math.min(1.0, SH()*P.col.C4_add[1]),
