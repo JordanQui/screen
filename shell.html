@@ -210,7 +210,7 @@ function stopAudio(){
 async function restartAudio(){
   if (micRestarting) return;
   micRestarting = true;
-  stopAudio();           // ⚠️ on ne stoppe PAS la boucle RAF → pas de “trou”
+  stopAudio();          
   micRestarts++; hudMsg();
   await startAudio();
   micRestarting = false;
@@ -221,7 +221,7 @@ function startMicResetTimer(){
   micResetTimerId = setInterval(restartAudio, MIC_RESET_MS);
 }
 
-/* ========= Boucle RAF unique (toujours active, même pendant les resets) ========= */
+/* ========= Boucle (toujours active, même pendant les resets) ========= */
 function tick(){
   // Si pas de graphe dispo, on décroit vers 0 en douceur (pas de coupure sèche)
   const L  = anLow .length ? levelFromAnalysersMax(anLow,  bufLow)  : 0;
