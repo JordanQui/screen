@@ -49,7 +49,7 @@ const fHigh = 20;
 
 /* ===== Grain doux commun ===== */
 const softNoise = noise(
-  () => 0.8 + (Mv1()+Mv2()+Hv())*1.6,
+  () => 0.2 + (Mv1()+Mv2()+Hv())*0.6,
   () => 0.08 + Hv()*0.30
 );
 
@@ -75,7 +75,7 @@ const lowTeal = () =>
       () => 0.10 + Lv()*0.50,   // G
       () => 0.14 + Lv()*0.55    // B
     )
-    .scrollX(dxL).scrollY(dyL);
+    // .scrollX(dxL).scrollY(dyL);
 
 /* MID1 — carmin (rouge froid) */
 const midCarmin = () =>
@@ -86,7 +86,7 @@ const midCarmin = () =>
       0,
       () => 0.10 + Mv1()*0.32   // B
     )
-    .scrollX(dxM1).scrollY(dyM1);
+    // .scrollX(dxM1).scrollY(dyM1);
 
 /* MID2 — ambre / or (R & G, pas de bleu) */
 const midAmber = () =>
@@ -97,7 +97,7 @@ const midAmber = () =>
       () => 0.12 + Mv2()*0.60,  // G
       0
     )
-    .scrollX(dxM2).scrollY(dyM2);
+    // .scrollX(dxM2).scrollY(dyM2);
 
 /* HIGH — bleu-glace (R<G<B), jamais blanc */
 const highIce = () =>
@@ -108,7 +108,7 @@ const highIce = () =>
       () => 0.16 + Math.min(0.58, Hv()*0.62),  // G
       () => 0.20 + Math.min(0.72, Hv()*0.78)   // B (dominant)
     )
-    .scrollX(dxH).scrollY(dyH);
+    // .scrollX(dxH).scrollY(dyH);
 
 /* ===== Mix final — sombre mais très différencié ===== */
 lowTeal()
@@ -117,7 +117,7 @@ lowTeal()
   .add(highIce(),   0.90)
   .saturate(0.98)
   .contrast(0.97)
-  .luma(0.5,0.1)
+  .luma(0.35,0.1)
   .out(o0);
 
 render(o0);
