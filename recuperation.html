@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hydra — palette violette • highs plus calmes • bloom réduit</title>
+  <meta name="theme-color" content="#000000">
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden}
+    canvas{position:fixed; inset:0; width:100vw; height:100vh; display:block; background:#000}
+  </style>
+  <!-- Bundle complet officiel (inclut gradient/voronoi/etc.) -->
+  <script src="https://cdn.jsdelivr.net/npm/hydra-synth/dist/hydra-synth.js"></script>
+</head>
+<body>
+<script>
+/* ====== Entrée bandes (depuis parent) ====== */
+let low=0, mid1=0, mid2=0, high=0;
+addEventListener('message',(e)=>{
+  const d=e.data; if(!d) return;
+  if(d.type==='bands'){
+    low = d.low  || 0;
+    mid1= d.mid1 || 0;
+    mid2= d.mid2 || 0;
+    high= d.high || 0;
+  }
+});
+
+/* ====== Canvas + Hydra ====== */
+const DPR=Math.min(2,(devicePixelRatio||1));
+let renderScale=1.0;
+const canvas=document.createElement('canvas');
+document.body.appendChild(canvas);
+const hydra=new Hydra({
+  canvas,
+  detectAudio:false,            // IMPORTANT: pas de micro, c'est le shell qui analyse
+  numOutputs:5,                 // o0..o4 : 1 par bande
+  width:Math.floor(innerWidth*DPR*renderScale),
+  height:Math.floor(innerHeight*DPR*renderScale)
+});
+function setRes(){
+  hydra.setResolution(
+    Math.max(64,Math.floor(innerWidth*DPR*renderScale)),
+    Math.max(64,Math.floor(innerHeight*DPR*renderScale))
+  );
+  canvas.width = Math.floor(innerWidth*DPR*renderScale);
+  canvas.height= Math.floor(innerHeight*DPR*renderScale);
+}
+addEventListener('resize',setRes,{passive:true});
+setRes();
+
+/* ====== Enveloppes & Sensibilité (post-lissage local doux) ====== */
+const ATK=0.65, REL=0.20;
+function smooth(x,s){ return s+(x-s)*(x<s?REL:ATK); }
+function boostBand(x, g, sens){ return Math.min(1, Math.pow(Math.max(0,x), g) * sens); }
+
+const PROF = {
+  L:{gamma:0.85, sens:1.55},
+  G:{gamma:0.70, sens:2.30},
+  E:{gamma:0.70, sens:2.30},
+  V:{gamma:0.88, sens:1.35}  // highs adoucis
+};
+
+let sl=0, sg=0, se=0, sv=0;
+const L0 = ()=> boostBand( (sl=smooth(low ,sl)), PROF.L.gamma, PROF.L.sens );
+const G0 = ()=> boostBand( (sg=smooth(mid1,sg)), PROF.G.gamma, PROF.G.sens );
+const E0 = ()=> boostBand( (se=smooth(mid2,se)), PROF.E.gamma, PROF.E.sens );
+const V0 = ()=> boostBand( (sv=smooth(high,sv)), PROF.V.gamma, PROF.V.sens );
+
+/* légère injection high -> mids (réduite) */
+const mix=(a,b,amt)=>(1-amt)*a+amt*b;
+const L = L0;
+const V = ()=> V0();
+const G = ()=> mix(G0(), V(), 0.14);
+const E = ()=> mix(E0(), V(), 0.24);
+
+/* ====== Paramètres dynamiques ====== */
+/* vitesses un peu plus basses côté highs */
+const POW_R=1.18, POW_G=1.06, POW_E=1.06, POW_V=1.10;
+const FMAX_R=40, FMAX_G=52, FMAX_E=58, FMAX_V=52;  // highs ↓
+const SMAX_R=0.50, SMAX_G=0.60, SMAX_E=0.70, SMAX_V=0.60;
+const fR=()=> FMAX_R*Math.pow(L(), POW_R);
+const fG=()=> FMAX_G*Math.pow(G(), POW_G);
+const fE=()=> FMAX_E*Math.pow(E(), POW_E);
+const fV=()=> FMAX_V*Math.pow(V(), POW_V);
+const sR=()=> SMAX_R*L();
+const sG=()=> SMAX_G*G();
+const sE=()=> SMAX_E*E();
+const sV=()=> SMAX_V*V();
+
+/* ====== Noise ====== */
+/* highs: moins d'événements (fréquence + amplitude de noise réduites) */
+const nR=()=> noise(()=> 1.2+5.2*L() , ()=> 0.00+0.50*L());
+const nG=()=> noise(()=> 1.3+6.0*G() , ()=> 0.00+0.60*G());
+const nE=()=> noise(()=> 1.3+6.4*E() , ()=> 0.00+0.68*E());
+const nV=()=> noise( ()=> 0.60 + 1.20*Math.pow(V(),0.85),
+                     ()=> 0.00 + 0.30*V() );
+
+/* ====== FM douce ====== */
+const FM_GATE_R=0.55, FM_GATE_G=0.45, FM_GATE_E=0.42, FM_GATE_V=0.56;
+const FM_IDX_R=0.75, FM_IDX_G=0.95, FM_IDX_E=0.95, FM_IDX_V=0.85;
+function fmIndex(x, gate, idxMax){
+  const t=Math.max(0,Math.min(1,(x-gate)/(1-gate+1e-6)));
+  return t*t*idxMax;
+}
+
+/* ====== Dégradés sans partage de nœud ====== */
+// Remplace TOUTE la fonction bandGradient par cette version
+function bandGradient(aR,aG,aB, bR,bG,bB, speed, angle, wobble){
+  // speed/angle/wobble peuvent être nombres OU fonctions -> on les "évalue" proprement
+  const val = v => (typeof v === 'function' ? v() : v);
+
+  const s  = () => val(speed);
+  const ang= () => val(angle) + val(wobble);
+
+  const g1 = gradient(s).rotate(ang);
+  const g2 = gradient(s).rotate(ang).invert();
+
+  const colA = g1.color(aR,aG,aB);
+  const colB = g2.color(bR,bG,bB);
+
+  // mélange neutre, bloom contenu
+  return colA.add(colB, 0.9).saturate(1.00).contrast(1.00);
+}
+
+
+/* ====== BUILD PATCH ====== */
+function buildPatch(){
+  /* Purge des sorties */
+  solid(0,0,0,1).out(o0);
+  solid(0,0,0,0).out(o1);
+  solid(0,0,0,0).out(o2);
+  solid(0,0,0,0).out(o3);
+  solid(0,0,0,0).out(o4);
+
+  /* --- LOW / bordeaux→violet --- */
+  const rCar = osc(()=> fR(), ()=> sR(), 0);
+  const rMod = osc(()=> fR()*2.10 + 6.5*L(), ()=> sR(), 0);
+  const rFM  = rCar.modulate(rMod, ()=> fmIndex(L(), FM_GATE_R, FM_IDX_R));
+  const rMask= rFM.modulate(nR(), ()=> 0.10*(0.5+L())).contrast(1.02);
+  const rGrad = bandGradient(
+    0.85,0.10,0.45,  0.60,0.20,0.55,
+    ()=> 0.03 + 0.10*L(),
+    ()=> 0.00 + 0.10*L(),
+    ()=> 0.05*L()
+  ).brightness(()=> -0.08 + 0.18*L()); // léger boost idle vs version initiale
+  rGrad.mult(rMask).out(o1);
+
+  /* --- MID1 / magenta --- */
+  const gCar = osc(()=> fG(), ()=> sG(), 0);
+  const gMod = osc(()=> fG()*2.30 + 8.5*G(), ()=> sG(), 0);
+  const gFM  = gCar.modulate(gMod, ()=> fmIndex(G(), FM_GATE_G, FM_IDX_G));
+  const gTex = voronoi( ()=> 3.0 + 12.0*G(), 0.50 ).rotate(()=> 0.12*G());
+  const gMask= gFM
+    .modulate(nG(), ()=> 0.12*(0.5+G()))
+    .mult( gTex.luma().contrast(1.20).brightness(0.03) )
+    .contrast(1.05);
+  const gGrad = bandGradient(
+    0.75,0.20,0.90,  0.95,0.60,1.00,
+    ()=> 0.05 + 0.18*G(),
+    ()=> 0.08 + 0.20*G(),
+    ()=> 0.10*G()
+  ).saturate(0.98).brightness(()=> -0.04 + 0.18*G());
+  const gLines = osc( ()=> 8 + 36*G(), ()=> 0.1 + 0.35*G(), 0 )
+    .thresh(0.6).invert().contrast(1.15);
+  gGrad.mult(gMask).add(gLines.color(0.9,0.3,1.0), ()=> 0.10*G()).out(o2);
+
+  /* --- MID2 / bleu→violet --- */
+  const eCar = osc(()=> fE(), ()=> sE(), 0);
+  const eMod = osc(()=> fE()*2.45 + 9.5*E(), ()=> sE(), 0);
+  const eFM  = eCar.modulate(eMod, ()=> fmIndex(E(), FM_GATE_E, FM_IDX_E));
+  const eGeom = shape( 3, ()=> 0.15 + 0.25*E(), 0.001 )
+    .kaleid( ()=> 3 + Math.floor(4*E()) )
+    .modulateRotate( nE(), ()=> 0.02 + 0.10*E() );
+  const eMask = eFM
+    .modulate(nE(), ()=> 0.11*(0.5+E()))
+    .add( eGeom.luma().contrast(1.3), ()=> 0.25*E() )
+    .contrast(1.04);
+  const eGrad = bandGradient(
+    0.30,0.35,1.00,  0.65,0.40,1.00,
+    ()=> 0.06 + 0.20*E(),
+    ()=> 0.16 + 0.28*E(),
+    ()=> 0.10*E()
+  ).saturate(0.98).brightness(()=> -0.03 + 0.18*E());
+  const eDiag = osc( ()=> 9 + 42*E(), ()=> 0.09 + 0.40*E(), 0.22 )
+    .thresh(0.58).contrast(1.20).rotate( ()=> 0.22 + 0.30*E() );
+  eGrad.mult(eMask).add(eDiag.color(0.5,0.4,1.0), ()=> 0.09*E()).out(o3);
+
+  /* --- HIGH / violet adouci + events moins fréquents --- */
+  const vCar = osc(()=> fV(), ()=> sV(), 0);
+  const vMod = osc(()=> fV()*2.40 + 8.5*V(), ()=> sV(), 0); // modulation plus sage
+  const vFM  = vCar.modulate(vMod, ()=> fmIndex(V(), FM_GATE_V, FM_IDX_V));
+  const vMask= vFM.modulate(nV(), ()=> 0.06*(0.4+V())).contrast(1.01);
+  const vGrad = bandGradient(
+    0.70,0.20,1.00,  0.90,0.40,1.00,
+    ()=> 0.02 + 0.08*V(),
+    ()=> 0.22 + 0.12*V(),
+    ()=> 0.05*V()
+  ).saturate( ()=> 0.98 + 0.12*V() )
+   .brightness( ()=> -0.05 + 0.12*V() );
+  vGrad.mult(vMask).out(o4);
+
+  /* --- Opacités (moins de bloom) --- */
+  const aR=()=> 0.10 + 0.48*L();  // +0.02 idle pour chauffe fiable
+  const aG=()=> 0.12 + 0.90*G();
+  const aE=()=> 0.12 + 0.90*E();
+  const aV=()=> 0.05 + 0.52*V();
+
+  /* --- Mix + feedback adouci --- */
+  src(o1)
+    .add(src(o2), ()=> aG())
+    .add(src(o3), ()=> aE())
+    .add(src(o4), ()=> aV())
+    .modulate(
+      noise( ()=> 1.6 + 4.2*(G()+E()),
+             ()=> 0.0 + 0.40*(G()+E()+V()) ),
+      ()=> 0.008 + 0.10*(G()+E()+V())
+    )
+    .blend(
+      src(o0).scale( ()=> 1.000 + 0.0015*(G()+E()+V()) ),
+      ()=> 0.03 + 0.18*(G()+E()+V())
+    )
+    .saturate( ()=> 0.98 + 0.06*(G()+E()) + 0.03*V() )
+    .brightness( ()=> -0.02 + 0.04*(G()+E()) + 0.02*L() )
+    .contrast(0.98)  // léger anti-bloom
+    .out(o0);
+}
+buildPatch();
+
+/* ====== Warm-up & handshake pour le shell ====== */
+const ctx2d=document.createElement('canvas').getContext('2d');
+let frames=0, hot=false;
+const tStart = performance.now();
+function lumaCenter(){
+  const w=Math.max(4,Math.floor(canvas.width/8));
+  const h=Math.max(4,Math.floor(canvas.height/8));
+  ctx2d.canvas.width=w; ctx2d.canvas.height=h;
+  ctx2d.drawImage(canvas,0,0,w,h);
+  const m=ctx2d.getImageData(w>>1,h>>1,1,1).data;
+  return (0.2126*m[0]+0.7152*m[1]+0.0722*m[2])/255;
+}
+function sendHot(){ try{ parent.postMessage({type:'paint-hot'}, '*'); }catch{} }
+function warmLoop(){
+  if(hot) return;
+  frames++;
+  const y=lumaCenter();
+  const elapsed = performance.now() - tStart;
+  // Déclenchement si image « vivante » OU fallback temps/frames (fiable en silence)
+  if (y>0.03 || frames>=45 || elapsed>900){
+    hot=true; sendHot();
+    return;
+  }
+  requestAnimationFrame(warmLoop);
+}
+requestAnimationFrame(()=>{ try{ parent.postMessage({type:'init-ready'}, '*'); }catch{} });
+requestAnimationFrame(warmLoop);
+
+/* ~50–60 fps auto-scaler (sûr dans iframe) */
+let fCount=0, t0=performance.now();
+function tick(){
+  fCount++;
+  if(fCount%120===0){
+    const t1=performance.now();
+    const fps=120000/(t1-t0); t0=t1;
+    if(fps<40 && renderScale>0.70){
+      renderScale=Math.max(0.70,renderScale-0.08); setRes();
+    } else if(fps>58 && renderScale<1.10){
+      renderScale=Math.min(1.10,renderScale+0.04); setRes();
+    }
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Hydra • Dark palette — bandes très différenciées (no white)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <style>
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    canvas { position:fixed; inset:0; width:100vw; height:100vh; display:block; background:#000; }
+  </style>
+  <script src="../hydra/hydra.js"></script>
+</head>
+<body>
+<canvas id="hydra"></canvas>
+<script>
+/* ===== In (4 bandes depuis le shell) ===== */
+let low=0, mid1=0, mid2=0, high=0;
+addEventListener('message',(e)=>{
+  const d=e.data; if(!d) return;
+  if(d.type==='bands'){ low=d.low||0; mid1=d.mid1||0; mid2=d.mid2||0; high=d.high||0; }
+});
+
+/* ===== Hi-DPI ===== */
+const canvas = document.getElementById('hydra');
+function setHiRes(){
+  const dpr = Math.min(3.0, window.devicePixelRatio||1);
+  const w = Math.floor(innerWidth*dpr), h = Math.floor(innerHeight*dpr);
+  canvas.width=w; canvas.height=h;
+  if (window.hydra?.setResolution) window.hydra.setResolution(w,h);
+}
+setHiRes();
+const hydra = new Hydra({ canvas, detectAudio:false, width:canvas.width, height:canvas.height, pixelRatio:1 });
+window.hydra = hydra;
+addEventListener('resize', setHiRes);
+
+/* ===== Aliases + courbe douce ===== */
+const g  = (x)=> Math.pow(Math.max(0,x), 0.8);
+const Lv = () => g(low);
+const Mv1= () => g(mid1);
+const Mv2= () => g(mid2);
+const Hv = () => g(high);
+
+/* ===== Fréquences: base FIXE + deltas réactifs par bande (bien séparés) ===== */
+const fLow  = 1;
+const fM1   = 5;
+const fM2   = 10;
+const fHigh = 20;
+
+/* ===== Grain doux commun ===== */
+const softNoise = noise(
+  () => 0.8 + (Mv1()+Mv2()+Hv())*1.6,
+  () => 0.08 + Hv()*0.30
+);
+
+/* ===== Profondeurs de modulation (accentuées) ===== */
+const modL  = () => 0.006 + Lv()*0.02;
+const modM1 = () => 0.006 + Mv1()*0.6;
+const modM2 = () => 0.006 + Mv2()*0.09;
+const modH  = () => 0.006 + Hv()*0.34;
+
+/* ===== Déplacements subtils par bande (séparation visuelle) ===== */
+const dxL  = () => (Lv()-0.1)*0.0020,  dyL  = () => (Lv()-0.1)*0.0012;
+const dxM1 = () => (Mv1()-0.1)*0.0024, dyM1 = () => (Mv1()-0.1)*0.0014;
+const dxM2 = () => (Mv2()-0.1)*0.0028, dyM2 = () => (Mv2()-0.1)*0.0016;
+const dxH  = () => (Hv()-0.1)*0.0032,  dyH  = () => (Hv()-0.1)*0.0018;
+
+/* ===== Couches (palettes très distinctes, sans blanc) ===== */
+/* LOW — teal profond (G/B dominants) */
+const lowTeal = () =>
+  osc(fLow, 0, 0)
+    .modulate(softNoise, modL)
+    .color(
+      () => 0.02 + Lv()*0.06,   // R
+      () => 0.10 + Lv()*0.50,   // G
+      () => 0.14 + Lv()*0.55    // B
+    )
+    .scrollX(dxL).scrollY(dyL);
+
+/* MID1 — carmin (rouge froid) */
+const midCarmin = () =>
+  osc(fM1, 0, 0)
+    .modulate(softNoise, modM1)
+    .color(
+      () => 0.22 + Mv1()*0.72,  // R
+      0,
+      () => 0.10 + Mv1()*0.32   // B
+    )
+    .scrollX(dxM1).scrollY(dyM1);
+
+/* MID2 — ambre / or (R & G, pas de bleu) */
+const midAmber = () =>
+  osc(fM2, 0, 0)
+    .modulate(softNoise, modM2)
+    .color(
+      () => 0.18 + Mv2()*0.68,  // R
+      () => 0.12 + Mv2()*0.60,  // G
+      0
+    )
+    .scrollX(dxM2).scrollY(dyM2);
+
+/* HIGH — bleu-glace (R<G<B), jamais blanc */
+const highIce = () =>
+  osc(fHigh, 0, 0)
+    .modulate(softNoise, modH)
+    .color(
+      () => 0.10 + Math.min(0.46, Hv()*0.50),  // R (le plus faible)
+      () => 0.16 + Math.min(0.58, Hv()*0.62),  // G
+      () => 0.20 + Math.min(0.72, Hv()*0.78)   // B (dominant)
+    )
+    .scrollX(dxH).scrollY(dyH);
+
+/* ===== Mix final — sombre mais très différencié ===== */
+lowTeal()
+  .add(midCarmin(), 0.92)
+  .add(midAmber(),  0.92)
+  .add(highIce(),   0.90)
+  .saturate(0.98)
+  .contrast(0.97)
+  .luma(0.5,0.1)
+  .out(o0);
+
+render(o0);
+requestAnimationFrame(()=> parent.postMessage({type:'paint-hot'}, '*'));
+</script>
+</body>
+</html>

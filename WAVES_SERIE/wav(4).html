@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>Hydra • Module — bands from shell • sharp + dezoom + fb clean</title>
+  <title>Hydra • Module — bands from shell • sharp + dezoom + fb clean • palette néon</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#000000" />
   <style>
@@ -22,28 +22,49 @@ addEventListener('message',(e)=>{
   if(d.type==='setParams'){ applyParams(d.params||{}); }
 });
 
-/* ===== Paramètres exposés ===== */
+/* ===== Paramètres exposés (nouvelle palette) ===== */
 const P = {
-  color: { low:"#ff1a1a", m1:"#18ff66", m2:"#1aa3ff", hi:"#ffffff" },
+  color: { 
+    low:"#ff6b00",   // ambre
+    m1:"#00ffd0",    // aqua
+    m2:"#7a5cff",    // violet
+    hi:"#ffd54a"     // or doux (remplace le blanc dur)
+  },
   fm:    { low:1.0, m1:1.0, m2:1.0, hi:1.0 },
-  flow:  { scale:0.18, speed:0.95, amt:3.20 },   // -20% d’amplitude pour réduire l’aspect “blob”
-  nHi:   { scale:0.60, speed:0.95, mix:0.00 },   // bruit des aigus un peu plus fin
-  view:  { zoom:0.92 },                          // <1.0 = léger dézoom (plus de finesse perçue)
-  detail:{ mul:1.12 },                           // >1.0 = motifs plus fins sans zoomer
+  flow:  { scale:0.18, speed:0.95, amt:3.20 },
+  nHi:   { scale:0.60, speed:0.95, mix:0.00 },
+  view:  { zoom:0.92 },
+  detail:{ mul:1.12 },
   perf:  {
     targetFPS: 60, minFPS: 48, maxFPS: 64,
-    resScale: 1.15, minScale: 1.00, maxScale: 1.40,  // jamais en-dessous du natif; léger SS par défaut
+    resScale: 1.15, minScale: 1.00, maxScale: 1.40,
     maxDPR: 3.0, quality: 2,
     adaptEveryMs: 900, scaleStep: 0.05,
     bootLockMs: 1200
-  }
+  },
+  _col: { low:[1,0,0], m1:[0,1,0], m2:[0,0,1], hi:[1,1,1] } // compilé depuis hex
 };
+function hexToF3(hex){
+  const h = (hex||"#000").replace("#","").trim();
+  const n = h.length===3 ? h.split("").map(c=>c+c).join("") : h;
+  const r = parseInt(n.slice(0,2),16)/255;
+  const g = parseInt(n.slice(2,4),16)/255;
+  const b = parseInt(n.slice(4,6),16)/255;
+  return [r,g,b];
+}
+function compilePalette(){
+  P._col.low = hexToF3(P.color.low);
+  P._col.m1  = hexToF3(P.color.m1);
+  P._col.m2  = hexToF3(P.color.m2);
+  P._col.hi  = hexToF3(P.color.hi);
+}
+compilePalette();
 window.P = P;
 
 /* ===== API publique ===== */
 function applyParams(p){
   if(!p) return;
-  if(p.color) Object.assign(P.color, p.color);
+  if(p.color){ Object.assign(P.color, p.color); compilePalette(); }
   if(p.fm)    Object.assign(P.fm,    p.fm);
   if(p.flow)  Object.assign(P.flow,  p.flow);
   if(p.nHi)   Object.assign(P.nHi,   p.nHi);
@@ -131,37 +152,50 @@ let _warmGate = 0;
   requestAnimationFrame(step);
 })();
 
-/* ===== Patch visuel ===== */
+/* ===== Patch visuel (avec palette appliquée) ===== */
 function buildPatch(){
   const Hsoft = () => Math.pow(clamp01(Hh()), 0.72);
-  const D = () => P.detail.mul; // finesse des motifs
+  const D = () => P.detail.mul;
 
   const fLow  = () => D()*( 8 + (L()*22 * P.fm.low) + (L()*3.0*P.fm.low)*(Math.sin(time*0.90)+Math.sin(time*1.457))*0.5 );
   const fM1   = () => D()*(11 + (M1()* 8 * P.fm.m1 ) + (M1()*2.4*P.fm.m1 )*(Math.sin(time*1.00)+Math.sin(time*1.618))*0.5);
   const fM2   = () => D()*(15 + (M2()*10 * P.fm.m2 ) + (M2()*2.8*P.fm.m2 )*(Math.sin(time*1.20)+Math.sin(time*1.946))*0.5);
   const fHigh = () => D()*Math.min(18 + (Hsoft()*28*P.fm.hi) + (Hsoft()*3.2*P.fm.hi)*(Math.sin(time*1.9)+Math.sin(time*2.89))*0.5, 34);
 
-  const red   = osc(fLow,  0, 0).color(() => (0.12+L()*0.88), 0, 0);
-  const green = osc(fM1,   0, 0).color(0, () => (0.18+M1()*0.82), 0);
-  const blue  = osc(fM2,   0, 0).color(0, 0, () => (0.18+M2()*0.82));
+  // helpers couleur
+  const colLow = ()=>P._col.low, colM1=()=>P._col.m1, colM2=()=>P._col.m2, colHi=()=>P._col.hi;
+
+  const baseLow  = () => (0.12+L()*0.88);
+  const baseM1   = () => (0.18+M1()*0.82);
+  const baseM2   = () => (0.18+M2()*0.82);
+  const baseHigh = () => (0.12+Math.min(1.0, Hsoft()*1.10));
+
+  const lowL = osc(fLow, 0, 0).color(
+    ()=> baseLow()*colLow()[0], ()=> baseLow()*colLow()[1], ()=> baseLow()*colLow()[2]
+  );
+  const m1L  = osc(fM1,  0, 0).color(
+    ()=> baseM1()*colM1()[0],  ()=> baseM1()*colM1()[1],  ()=> baseM1()*colM1()[2]
+  );
+  const m2L  = osc(fM2,  0, 0).color(
+    ()=> baseM2()*colM2()[0],  ()=> baseM2()*colM2()[1],  ()=> baseM2()*colM2()[2]
+  );
 
   const fbm = fbmNoise(
     () => (1.2 + Hsoft()*6.5)*P.nHi.scale,
     () => (0.11 + Hsoft()*0.40)*P.nHi.speed
   );
-  const white = osc(fHigh, 0, 0)
-    .modulate(fbm, () => (0.010+Hsoft()*0.040)*P.nHi.mix) // -20% pour éviter le grain carré
+  const hiL = osc(fHigh, 0, 0)
+    .modulate(fbm, () => (0.010+Hsoft()*0.040)*P.nHi.mix)
     .color(
-      () => 0.12 + Math.min(1.0, Hsoft()*1.10),
-      () => 0.12 + Math.min(1.0, Hsoft()*1.10),
-      () => 0.12 + Math.min(1.0, Hsoft()*1.10)
+      ()=> baseHigh()*colHi()[0],
+      ()=> baseHigh()*colHi()[1],
+      ()=> baseHigh()*colHi()[2]
     );
 
-  let mix = red.add(green,0.95).add(blue,0.95).add(white,0.95)
+  let mix = lowL.add(m1L,0.95).add(m2L,0.95).add(hiL,0.95)
                .saturate(1.01).contrast(1.005)
-               .scale(() => P.view.zoom); // dézoom léger
+               .scale(() => P.view.zoom);
 
-  // FLOW adouci (↓) pour limiter les artefacts en feedback
   const flow = noise(
     () => (1.25+(M1()+M2()+Hh())*2.2)*P.flow.scale,
     () => (0.05+Hh()*0.40)*P.flow.speed * _warmGate
@@ -169,24 +203,27 @@ function buildPatch(){
   const flowAmt = () => (0.010+(L()+M1()+M2())*0.015+Hsoft()*0.026) * P.flow.amt * _warmGate;
 
   mix = mix.modulate(flow, flowAmt)
-           .scrollX(() => (M2()-L())*0.0022)  // scroll plus fin
+           .scrollX(() => (M2()-L())*0.0022)
            .scrollY(() => (M1()-Hh())*0.0022);
 
-  // Feedback plus “propre” : plafond ↓, micro-contrast ↓ pour éviter les blocs
   const fbAmtBase = () => Math.min(0.22, 0.10+(L()+M1()+M2())*0.14+Hsoft()*0.10);
   const fbAmt = () => fbAmtBase() * _warmGate;
 
   mix = mix.blend(
     src(o0)
-      .colorama(() => 0.006+Hh()*0.020)  // -40%
-      .contrast(1.0005),                 // micro-ajustement
+      .colorama(() => 0.006+Hh()*0.020)
+      .contrast(1.0005),
+      
     fbAmt
-  ).out(o0);
+  )
+  .luma(0.5,0.1)
+  .brightness(0.1)
+  .out(o0);
 }
 buildPatch();
 render(o0);
 
-/* ===== Perf monitor (qualité d’abord, jamais < natif) ===== */
+/* ===== Perf monitor ===== */
 let _frames=0, _lastT=performance.now(), _accMs=0, _lastAdapt=performance.now();
 const _bootT0 = performance.now();
 function perfTick(now){
@@ -218,7 +255,7 @@ function perfTick(now){
 }
 requestAnimationFrame(perfTick);
 
-/* ===== “paint-hot” après 2 frames pleines ===== */
+/* ===== “paint-hot” ===== */
 let _paintFrames=0;
 function paintPing(){
   _paintFrames++;
