@@ -97,8 +97,8 @@ function buildPatch(){
 
   const fineNoise =
     noise(
-      () => 2.0 + Hsoft()*6.0,              // “fin” poussé par les aigus
-      () => 0.10 + Hsoft()*0.50
+      () => 10.0 + Hsoft()*6.0,              // “fin” poussé par les aigus
+      () => 0.6 + Hsoft()*0.50
     );
 
   /* Fusion bruits + micro-dérive */
@@ -129,7 +129,7 @@ function buildPatch(){
     // .diff(fb, fbAmt1)    // relief/edges
     .add (fb, fbAmt2)    // rémanence
     .colorama(0.7,0.1,0.1)
-    // .scale(-2)
+    .scale(() => (L()+M1()+M2())*0.3 + Hsoft()*0.6)
     // .saturate(0)         // === NOIR & BLANC ===
     // .gamma(() => 0.96 + E()*0.06)      // légère tension avec l’énergie
     .luma(() => 0.5 + (E()-0.5)*0.10)  // recentre la luminance
