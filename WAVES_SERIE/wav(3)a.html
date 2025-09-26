@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>Hydra • Dark palette — bandes très différenciées (no white)</title>
+  <title>Hydra • Dark palette — bandes très différenciées (no white) — sensibilité augmentée</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#000000" />
   <style>
@@ -18,7 +18,13 @@
 let low=0, mid1=0, mid2=0, high=0;
 addEventListener('message',(e)=>{
   const d=e.data; if(!d) return;
-  if(d.type==='bands'){ low=d.low||0; mid1=d.mid1||0; mid2=d.mid2||0; high=d.high||0; }
+  if(d.type==='bands'){
+    // on accepte des valeurs null/undefined
+    low = typeof d.low === 'number' ? d.low : low;
+    mid1 = typeof d.mid1 === 'number' ? d.mid1 : mid1;
+    mid2 = typeof d.mid2 === 'number' ? d.mid2 : mid2;
+    high = typeof d.high === 'number' ? d.high : high;
+  }
 });
 
 /* ===== Hi-DPI ===== */
@@ -34,12 +40,61 @@ const hydra = new Hydra({ canvas, detectAudio:false, width:canvas.width, height:
 window.hydra = hydra;
 addEventListener('resize', setHiRes);
 
-/* ===== Aliases + courbe douce ===== */
-const g  = (x)=> Math.pow(Math.max(0,x), 0.8);
-const Lv = () => g(low);
-const Mv1= () => g(mid1);
-const Mv2= () => g(mid2);
-const Hv = () => g(high);
+/* ===== Sensibilité / enveloppe ===== */
+/* Constantes (par défaut alignées sur tes préférences) */
+const NOISE_FLOOR = 0.005;   // seuil de bruit retiré avant gain
+const GAIN        = 27.0;     // amplification globale
+const GAMMA       = 0.7;     // non-linéarité (0..1 -> plus sensible aux faibles valeurs)
+const ATTACK      = 0.6;     // lissage d'attaque (0..1, plus grand = plus rapide)
+const RELEASE     = 0.08;    // lissage de release (0..1, plus petit = release lent)
+const SILENCE_GATE = 0.02;   // seuil considéré comme silence
+const SILENCE_FRAMES = 2;    // nombre de frames avant clamp silence
+
+/* états pour lissage */
+const prev = { low:0, mid1:0, mid2:0, high:0 };
+const silenceCount = { low:0, mid1:0, mid2:0, high:0 };
+
+/* traitement d'une bande brute venant du shell -> valeur [0..1] prête à l'emploi */
+function processBand(raw, key){
+  // 1) retirer bruit de fond et appliquer gain
+  let v = raw - NOISE_FLOOR;
+  if (v < 0) v = 0;
+  v = v * GAIN;
+
+  // 2) compresser / gamma pour sensibilité aux faibles niveaux
+  v = Math.pow(Math.max(0, v), GAMMA);
+
+  // 3) clamp
+  v = Math.min(1, Math.max(0, v));
+
+  // 4) silence gate (petite hysteresis sur quelques frames)
+  if (v < SILENCE_GATE){
+    silenceCount[key] = (silenceCount[key] || 0) + 1;
+    if (silenceCount[key] >= SILENCE_FRAMES) v = 0;
+  } else {
+    silenceCount[key] = 0;
+  }
+
+  // 5) envelope smoothing (attack/release asymmetric)
+  const previous = prev[key] || 0;
+  let smoothed;
+  if (v > previous){
+    // attaque (plus rapide)
+    smoothed = previous + (v - previous) * ATTACK;
+  } else {
+    // release (plus lent)
+    smoothed = previous + (v - previous) * RELEASE;
+  }
+  prev[key] = smoothed;
+  return smoothed;
+}
+
+/* ===== Aliases + courbe douce (utilisent la valeur traitée) ===== */
+const g  = (x)=> Math.pow(Math.max(0,x), 0.8); // courbe douce visuelle (conserve)
+const Lv = () => g(processBand(low,  'low'));
+const Mv1= () => g(processBand(mid1, 'mid1'));
+const Mv2= () => g(processBand(mid2, 'mid2'));
+const Hv = () => g(processBand(high, 'high'));
 
 /* ===== Fréquences: base FIXE + deltas réactifs par bande (bien séparés) ===== */
 const fLow  = 1;
@@ -74,8 +129,7 @@ const lowTeal = () =>
       () => 0.02 + Lv()*0.06,   // R
       () => 0.10 + Lv()*0.50,   // G
       () => 0.14 + Lv()*0.55    // B
-    )
-    // .scrollX(dxL).scrollY(dyL);
+    );
 
 /* MID1 — carmin (rouge froid) */
 const midCarmin = () =>
@@ -85,8 +139,7 @@ const midCarmin = () =>
       () => 0.22 + Mv1()*0.72,  // R
       0,
       () => 0.10 + Mv1()*0.32   // B
-    )
-    // .scrollX(dxM1).scrollY(dyM1);
+    );
 
 /* MID2 — ambre / or (R & G, pas de bleu) */
 const midAmber = () =>
@@ -96,19 +149,17 @@ const midAmber = () =>
       () => 0.18 + Mv2()*0.68,  // R
       () => 0.12 + Mv2()*0.60,  // G
       0
-    )
-    // .scrollX(dxM2).scrollY(dyM2);
+    );
 
 /* HIGH — bleu-glace (R<G<B), jamais blanc */
 const highIce = () =>
   osc(fHigh, 0, 0)
     .modulate(softNoise, modH)
     .color(
-      () => 0.10 + Math.min(0.46, Hv()*0.50),  // R (le plus faible)
+      () => 0.10 + Math.min(0.46, Hv()*0.50),  // R 
       () => 0.16 + Math.min(0.58, Hv()*0.62),  // G
-      () => 0.20 + Math.min(0.72, Hv()*0.78)   // B (dominant)
-    )
-    // .scrollX(dxH).scrollY(dyH);
+      () => 0.20 + Math.min(0.72, Hv()*0.78)   // B 
+    );
 
 /* ===== Mix final — sombre mais très différencié ===== */
 lowTeal()
@@ -116,8 +167,9 @@ lowTeal()
   .add(midAmber(),  0.92)
   .add(highIce(),   0.90)
   .saturate(0.98)
-  .contrast(0.97)
-  .luma(0.35,0.1)
+  .brightness(() => 0 - (Lv() * 0.15) - (Mv1() * 0.15) - (Mv1() * 0.15) - (Hv() * 0.5))
+  .contrast(2)
+  .luma(0.1,0.1)
   .out(o0);
 
 render(o0);
