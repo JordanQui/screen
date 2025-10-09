@@ -51,11 +51,22 @@
     }
 
     /* ========= Hydra ========= */
+    const hydraCanvas=document.getElementById('hydra');
     const hydra=new Hydra({
-      canvas:document.getElementById('hydra'),
+      canvas:hydraCanvas,
       makeGlobal:true,
       detectAudio:false
     });
+
+    const setHydraResolution=()=>{
+      const pixelRatio=Math.min(window.devicePixelRatio||1,3);
+      const w=Math.floor(window.innerWidth*pixelRatio);
+      const h=Math.floor(window.innerHeight*pixelRatio);
+      hydra.setResolution(w,h);
+    };
+
+    setHydraResolution();
+    window.addEventListener('resize',()=>requestAnimationFrame(setHydraResolution));
 
     // Helpers exposés à Hydra
     window.$breath    = ()=>breath;
