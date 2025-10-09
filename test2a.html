@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Hydra — Genèse du son (Multi-rings, vibration spectrale)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden}
+    #hydra{width:100vw;height:100vh;display:block}
+  </style>
+  <script src="https://unpkg.com/hydra-synth"></script>
+</head>
+<body>
+  <canvas id="hydra"></canvas>
+  <script>
+    /* ========= Réception depuis le shell ========= */
+    const bands = { low:0, mid1:0, mid2:0, high:0 };
+    window.addEventListener('message',(e)=>{
+      const d=e.data;
+      if(!d || d.type!=='bands') return;
+      bands.low  = clamp01(d.low  ?? 0);
+      bands.mid1 = clamp01(d.mid1 ?? 0);
+      bands.mid2 = clamp01(d.mid2 ?? 0);
+      bands.high = clamp01(d.high ?? 0);
+      lastBandT = performance.now();
+    });
+    const clamp01 = x => x<0?0:x>1?1:x;
+
+    /* ========= Enveloppes dynamiques ========= */
+    let lastBandT=performance.now();
+    let breath=0,resonance=0;
+    let colorWarm=0,colorGreen=0,colorBlue=0,shimmer=0;
+
+    function updateEnvelopes(){
+      const stale = (performance.now()-lastBandT)>250;
+      const l = stale?0:bands.low;
+      const m1= stale?0:bands.mid1;
+      const m2= stale?0:bands.mid2;
+      const h = stale?0:bands.high;
+
+      const targetBreath = Math.max(l,m1,m2,h);
+      breath    += (targetBreath-breath)    * (targetBreath>breath ? 0.50 : 0.15);
+      resonance += (targetBreath-resonance) * (targetBreath>resonance? 0.10 : 0.035);
+
+      colorWarm += (l  - colorWarm) * 0.05;   // L
+      colorGreen+= (m1 - colorGreen)* 0.40;   // M1
+      colorBlue += (m2 - colorBlue) * 0.40;   // M2
+      shimmer   += (h  - shimmer * 2);   // H
+
+      requestAnimationFrame(updateEnvelopes);
+    }
+
+    /* ========= Hydra ========= */
+    const hydra=new Hydra({
+      canvas:document.getElementById('hydra'),
+      makeGlobal:true,
+      detectAudio:false
+    });
+
+    // Helpers exposés à Hydra
+    window.$breath    = ()=>breath;
+    window.$resonance = ()=>resonance;
+    window.$L = ()=>colorWarm;
+    window.$M1= ()=>colorGreen;
+    window.$M2= ()=>colorBlue;
+    window.$H = ()=>shimmer;
+
+    // Courbes gaussiennes pour interpolation spectrale
+    function bell(x,c,w){ const k=(x-c)/w; return Math.exp(-0.5*k*k); }
+    function specAt(x){
+      const cL=0.10, cM1=0.35, cM2=0.65, cH=0.90;
+      const wL=0.22, wM1=0.20, wM2=0.20, wH=0.22;
+      const bL=bell(x,cL,wL), b1=bell(x,cM1,wM1), b2=bell(x,cM2,wM2), bH=bell(x,cH,wH);
+      const num=bL*$L()+b1*$M1()+b2*$M2()+bH*$H();
+      const den=bL+b1+b2+bH+1e-6;
+      return num/den;
+    }
+
+    /* ---- MULTI-ANNEAUX : sans multiplication, juste vibration du bruit ---- */
+    function ringsMulti(n=9){
+      const fMin = 0.6, fMax = 12.0;
+      const spdMin = 0.02, spdMax = 0.30;
+      const baseR = 0.18, endR = 0.62;
+      const thick = ()=>0.010 + 0.025*$resonance();
+
+      let acc = solid(0,0,0,0);
+
+      for(let i=0;i<n;i++){
+        const t = n===1?0 : i/(n-1);
+        const e = ()=>specAt(t);
+        const fNoise = ()=> fMin + (fMax-fMin)*e();
+        const sNoise = ()=> spdMin + (spdMax-spdMin)*e();
+        const rot    = ()=> (0.01 + 0.10*$breath())*(t-0.5);
+        const R = ()=> baseR + (endR-baseR)*t;
+        const inner = ()=> Math.max(0.01, R() - thick());
+        const smooth = ()=> 0.02 + 0.03*$resonance();
+
+        const cr = ()=> 0.35 + 0.65*(0.6*$L() + 0.4*(1-t));
+        const cg = ()=> 0.35 + 0.65*(0.6*$M1() + 0.4*(0.5+0.5*Math.cos(3.1415*t)));
+        const cb = ()=> 0.40 + 0.60*(0.6*$M2() + 0.4*(t));
+
+        const ringTex =
+          shape(96,R,smooth)
+            .diff(shape(96,inner,smooth))
+            .rotate(()=>time*rot())
+            .modulate(noise(fNoise, sNoise), ()=> 0.015 + 0.090*$resonance())
+            .modulateScale(noise(()=>0.8+0.6*fNoise(), ()=>0.4*sNoise()), ()=> 0.01 + 0.06*$breath())
+            .brightness(0.2)
+            .contrast(()=> 1.0 + 1.00*$resonance()*e())
+            .scale(() => 4 + bands.low * 6)
+            .luma(0.2,1)
+            // .saturate(()=> 1.0 + 0.40*e())
+            .color(cr, cg, cb);
+
+        acc = acc.add(ringTex, ()=>0.08 + 0.18*e()); // simple addition (pas de .mult)
+      }
+
+      return acc; // pas de multiplication avec cavité
+    }
+
+    /* ---- Composition ---- */
+    ringsMulti(12)
+      .scale(()=>1.0+0.05*$breath())
+      .luma(()=>0.08+0.10*$H())
+      .saturate(()=>1.0+0.4*$resonance())
+      .out(o0);
+
+    render(o0);
+
+    /* ---- Ping au shell ---- */
+    let hotSent=false,hotFrames=0;
+    function hotLoop(){
+      if(!hotSent){
+        if(++hotFrames>=2){
+          try{ window.parent.postMessage({type:'paint-hot'},'*'); }catch{}
+          hotSent=true;
+        }
+      }
+      requestAnimationFrame(hotLoop);
+    }
+
+    updateEnvelopes();
+    hotLoop();
+  </script>
+</body>
+</html>
