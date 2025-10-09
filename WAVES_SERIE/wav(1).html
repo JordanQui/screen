@@ -82,7 +82,9 @@ function buildPatch(){
   mix = mix.blend(
     src(o0)
       .colorama(() => 0.010 + Hh()*0.040)
-      .contrast(1.001),
+      .contrast(1.001)
+      .colorama(0.1,0.1,0.1)
+      .luma(0.25,1),
     fbAmt
   ).out(o0);
 }

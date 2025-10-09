@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Hydra • Variation — bands from shell (Hi-DPI, N&B, feedback noise++ • highs boosted)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <style>
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    canvas { position:fixed; inset:0; width:100vw; height:100vh; display:block; background:#000; }
+  </style>
+  <script src="../hydra/hydra.js"></script>
+</head>
+<body>
+<canvas id="hydra"></canvas>
+<script>
+/* ===== Reçoit les 4 bandes du shell (AUCUN micro ici) ===== */
+let low=0, mid1=0, mid2=0, high=0;
+addEventListener('message',(e)=>{
+  const d=e.data; if(!d) return;
+  if (d.type==='bands'){ low=d.low||0; mid1=d.mid1||0; mid2=d.mid2||0; high=d.high||0; }
+});
+
+/* ===== Hi-DPI ===== */
+const canvas = document.getElementById('hydra');
+function setHiRes(){
+  const dpr = Math.min(3.0, window.devicePixelRatio||1);
+  const w = Math.floor(innerWidth * dpr), h = Math.floor(innerHeight * dpr);
+  canvas.width = w; canvas.height = h;
+  if (window.hydra?.setResolution) window.hydra.setResolution(w, h);
+}
+setHiRes();
+const hydra = new Hydra({ canvas, detectAudio:false, width:canvas.width, height:canvas.height, pixelRatio:1 });
+window.hydra = hydra;
+addEventListener('resize', setHiRes);
+
+/* ===== Aliases ===== */
+const L  = () => low;
+const M1 = () => mid1;
+const M2 = () => mid2;
+const Hh = () => high;
+
+/* ===== Boost spécifique des aigus =====
+   - H_GAIN/H_GAMMA -> augmente la sensibilité perçue des highs
+   - Utilisé pour (1) l'énergie/gate et (2) les modulations/fréquences */
+const H_GAIN  = 1.8;
+const H_GAMMA = 0.60;
+const Hsens = () => Math.min(1, Math.pow(Math.max(0, Hh()), H_GAMMA) * H_GAIN);
+
+/* ===== Gate de silence (avec highs plus influents) ===== */
+const NOISE_FLOOR   = 0.02;
+const SILENCE_GATE  = 0.06;
+const ATTACK_COEF   = 0.30;
+const RELEASE_COEF  = 0.06;
+
+let eSmooth = 0; // énergie lissée (0..1)
+function updateEnergy(){
+  // énergie brute = max des bandes (aigus boostés)
+  const henergy = Hsens();
+  const raw = Math.max(L(), M1(), M2(), henergy);
+
+  // retire le bruit de fond puis normalise
+  const above = Math.max(0, raw - NOISE_FLOOR) / (1 - NOISE_FLOOR);
+  const target = Math.min(1, above);
+
+  const coef = (target > eSmooth) ? ATTACK_COEF : RELEASE_COEF;
+  eSmooth += (target - eSmooth) * coef;
+
+  requestAnimationFrame(updateEnergy);
+}
+updateEnergy();
+
+// courbe d’ouverture pour FB/modulations (0 sous gate, 1 au-dessus)
+const FB_G = () => {
+  const x = Math.max(0, eSmooth - SILENCE_GATE) / (1 - SILENCE_GATE);
+  return Math.pow(x, 1.2);
+};
+const E = () => eSmooth;
+
+/* ===== Variation N&B — bruit + feedback granuleux (highs ++ rapides) ===== */
+function buildPatch(){
+  /* Fréquences : les aigus montent plus vite la fondamentale */
+  const fLow  = () => 6  + L()*8  + Hsens()*2.5
+    + (L()*1.2)*(Math.sin(time*0.9)  + Math.sin(time*1.31))*0.5;
+
+  const fM1   = () => 9  + M1()*6  + Hsens()*4.0
+    + (M1()*1.0)*(Math.sin(time*1.1) + Math.sin(time*1.77))*0.5;
+
+  const fM2   = () => 12 + M2()*8  + Hsens()*7.5   // ← montée franche avec les aigus
+    + (M2()*1.2)*(Math.sin(time*1.3) + Math.sin(time*2.03))*0.5;
+
+  /* Base oscillatoire (faible contraste, mais highs tirent vers + de stries) */
+  const base =
+    osc(fLow() + Hsens()*2, 0, (L()+M1()+M2())*0.2 + Hsens()*24)
+      .add( osc(fM1, 0, 1), 0.6 )
+      .add( osc(fM2, 0, 1), 0.6 )
+      .contrast(1.03 + Hsens()*2)
+      .brightness(-0.5);
+
+  /* Champ de bruit multi-échelles, grain fin poussé par les aigus */
+  const coarseNoise =
+    noise(
+      () => 0.5 + (L()+M1())*1.8,
+      () => 0.08 + (M2())*0.25
+    );
+
+  const fineNoise =
+    noise(
+      () => 0.24 + Hsens()*4,     // plus fin/rapide avec highs
+      () => 0.6  + Hsens()*0.60
+    );
+
+  /* Fusion bruits + micro-dérive (aigus => déplacements un peu plus vifs) */
+  let field = coarseNoise
+    .add(fineNoise, () => 0.55 + Hsens()*0.45)
+    .contrast(() => 1.0 + E()*0.10 + Hsens()*0.06);
+
+  /* Modulations : s’ouvrent avec FB_G(), aigus renforcent la profondeur */
+  let mix = base
+    .modulate(field, () => (0.005 + (L()+M1()+M2())*0.01 + Hsens()*0.035) * FB_G())
+    .add( fineNoise, () => (0.02 + Hsens()*0.22) * FB_G() )  // grain fin très réactif aux aigus
+    .contrast(() => 1.01 + E()*0.06 + Hsens()*0.04)
+    .brightness(() => -0.06 - E()*0.04 - Hsens()*0.015);
+
+  /* Feedback : coupé net au silence, mais plus nerveux quand highs présents */
+  const fb = src(o0)
+    .modulate(field, () => (0.006 + E()*0.015 + Hsens()*0.012) * FB_G())
+    .colorama(() => 0.24 * FB_G()*5)
+    .contrast(1.003 + Hsens()*0.003)
+
+  const fbAmt1 = () => Math.min(0.46, (0.10 + (L()+M1()+M2())*0.18 + Hsens()*0.22) * FB_G());
+  const fbAmt2 = () => Math.min(0.38, (0.06 + (L()+M1())*0.14 + Hsens()*0.18) * FB_G());
+
+  mix = mix
+    .add (fb, fbAmt2)      // rémanence
+    .brightness(-0.25)
+    .luma(() => 0.75 + (E()-0.5)*0.10 + Hsens() * -0.4)   // N&B
+    .blend(o0)
+    .out(o0);
+}
+buildPatch();
+render(o0);
+
+/* ===== Signal “paint-hot” au shell ===== */
+requestAnimationFrame(()=> parent.postMessage({type:'paint-hot'}, '*'));
+</script>
+</body>
+</html>
