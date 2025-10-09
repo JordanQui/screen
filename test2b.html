@@ -15,6 +15,8 @@
   <script>
     /* ========= Réception depuis le shell ========= */
     const bands = { low:0, mid1:0, mid2:0, high:0 };
+    const rawColors = { low:0, mid1:0, mid2:0, high:0 };
+    let colorGain = 1.8; // gain global appliqué aux couleurs issues des bandes
     window.addEventListener('message',(e)=>{
       const d=e.data;
       if(!d || d.type!=='bands') return;
@@ -25,6 +27,12 @@
       lastBandT = performance.now();
     });
     const clamp01 = x => x<0?0:x>1?1:x;
+
+    window.setColorGain = g => {
+      const v = Number.isFinite(g) ? g : colorGain;
+      colorGain = Math.max(0, v);
+    };
+    window.$colorGain = () => colorGain;
 
     /* ========= Enveloppes dynamiques ========= */
     let lastBandT=performance.now();
@@ -38,14 +46,21 @@
       const m2= stale?0:bands.mid2;
       const h = stale?0:bands.high;
 
+      const drive = x => clamp01(x * colorGain);
+
+      rawColors.low  = drive(l);
+      rawColors.mid1 = drive(m1);
+      rawColors.mid2 = drive(m2);
+      rawColors.high = drive(h);
+
       const targetBreath = Math.max(l,m1,m2,h);
       breath    += (targetBreath-breath)    * (targetBreath>breath ? 0.50 : 0.15);
       resonance += (targetBreath-resonance) * (targetBreath>resonance? 0.10 : 0.035);
 
-      colorWarm += (l  - colorWarm) * 0.05;   // L
-      colorGreen+= (m1 - colorGreen)* 0.40;   // M1
-      colorBlue += (m2 - colorBlue) * 0.40;   // M2
-      shimmer   += (h  - shimmer * 2);   // H
+      colorWarm += (rawColors.low  - colorWarm) * 0.28;   // L
+      colorGreen+= (rawColors.mid1 - colorGreen)* 0.55;   // M1
+      colorBlue += (rawColors.mid2 - colorBlue) * 0.55;   // M2
+      shimmer   += (rawColors.high - shimmer)    * 0.38;   // H
 
       requestAnimationFrame(updateEnvelopes);
     }
@@ -64,6 +79,10 @@
     window.$M1= ()=>colorGreen;
     window.$M2= ()=>colorBlue;
     window.$H = ()=>shimmer;
+    window.$rawL = ()=>rawColors.low;
+    window.$rawM1= ()=>rawColors.mid1;
+    window.$rawM2= ()=>rawColors.mid2;
+    window.$rawH = ()=>rawColors.high;
 
     // Courbes gaussiennes pour interpolation spectrale
     function bell(x,c,w){ const k=(x-c)/w; return Math.exp(-0.5*k*k); }
@@ -71,7 +90,11 @@
       const cL=0.10, cM1=0.35, cM2=0.65, cH=0.90;
       const wL=0.22, wM1=0.20, wM2=0.20, wH=0.22;
       const bL=bell(x,cL,wL), b1=bell(x,cM1,wM1), b2=bell(x,cM2,wM2), bH=bell(x,cH,wH);
-      const num=bL*$L()+b1*$M1()+b2*$M2()+bH*$H();
+      const mix = (smooth, raw) => 0.6*smooth + 0.4*raw;
+      const num=bL*mix($L(),$rawL())
+               +b1*mix($M1(),$rawM1())
+               +b2*mix($M2(),$rawM2())
+               +bH*mix($H(),$rawH());
       const den=bL+b1+b2+bH+1e-6;
       return num/den;
     }
@@ -95,9 +118,9 @@
         const inner = ()=> Math.max(0.01, R() - thick());
         const smooth = ()=> 0.02 + 0.03*$resonance();
 
-        const cr = ()=> 0.35 + 0.65*(0.6*$L() + 0.4*(1-t));
-        const cg = ()=> 0.35 + 0.65*(0.6*$M1() + 0.4*(0.5+0.5*Math.cos(3.1415*t)));
-        const cb = ()=> 0.40 + 0.60*(0.6*$M2() + 0.4*(t));
+        const cr = ()=> 0.25 + 0.75*(0.55*$L()  + 0.45*$rawL()  + 0.20*(1-t));
+        const cg = ()=> 0.28 + 0.72*(0.55*$M1() + 0.45*$rawM1() + 0.20*(0.5+0.5*Math.cos(3.1415*t)));
+        const cb = ()=> 0.30 + 0.70*(0.55*$M2() + 0.45*$rawM2() + 0.20*(t));
 
         const ringTex =
           shape(96,R,smooth)
