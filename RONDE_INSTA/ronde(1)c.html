@@ -82,9 +82,9 @@ function buildPatch(){
 
   /* Base oscillatoire (faible contraste) */
   const base =
-    osc(fLow, 0, 0)
-      .add( osc(fM1, 0, 0), 0.6 )
-      .add( osc(fM2, 0, 0), 0.6 )
+    osc(fLow, 0, (L()+M1()+M2())*0.2 - Hsoft()*0.5)
+      .add( osc(fM1, 0, 1), 0.6 )
+      .add( osc(fM2, 0, 1), 0.6 )
       .contrast(1.02)
       .brightness(-0.03);
 
@@ -97,7 +97,7 @@ function buildPatch(){
 
   const fineNoise =
     noise(
-      () => 2.0 + Hsoft()*6.0,              // “fin” poussé par les aigus
+      () => 0.2 + Hsoft()*6.0,              // “fin” poussé par les aigus
       () => 0.6 + Hsoft()*0.50
     );
 
@@ -128,11 +128,12 @@ function buildPatch(){
   mix = mix
     // .diff(fb, fbAmt1)    // relief/edges
     .add (fb, fbAmt2)    // rémanence
-    .colorama(0.27,0.1,0.1)
-    .scale(() => 1 - (L()+M1()+M2())*0.1 + Hsoft()*0.9)
+    // .colorama(0.75,0.2,0.2)
+    .brightness(-0.5)
+    // .scale(() => 0.5 + (L()+M1()+M2())*0.2 - Hsoft()*1)
     // .saturate(0)         // === NOIR & BLANC ===
     // .gamma(() => 0.96 + E()*0.06)      // légère tension avec l’énergie
-    .luma(() => 0.5 + (E()-0.5)*0.10)  // recentre la luminance
+    .luma(() => 0.75 + (E()-0.5)*0.10)  // recentre la luminance
     .out(o0);
 }
 buildPatch();
