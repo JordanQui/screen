@@ -106,10 +106,10 @@
             .modulate(noise(fNoise, sNoise), ()=> 0.015 + 0.090*$resonance())
             .modulateScale(noise(()=>0.8+0.6*fNoise(), ()=>0.4*sNoise()), ()=> 0.01 + 0.06*$breath())
             .brightness(0.12)
-            .contrast(()=> 1.0 + 1.00*$resonance()*e())
+            // .contrast(()=> 1.0 + 1.00*$resonance()*e())
             .scale(() => 5 + bands.low * 3)
             .luma(0.2,1)
-            .contrast(1.2)
+            // .contrast(1.2)
             // .saturate(()=> 1.0 + 0.40*e())
             .color(cr, cg, cb);
 
