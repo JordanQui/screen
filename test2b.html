@@ -51,22 +51,11 @@
     }
 
     /* ========= Hydra ========= */
-    const hydraCanvas=document.getElementById('hydra');
     const hydra=new Hydra({
-      canvas:hydraCanvas,
+      canvas:document.getElementById('hydra'),
       makeGlobal:true,
       detectAudio:false
     });
-
-    const setHydraResolution=()=>{
-      const pixelRatio=Math.min(window.devicePixelRatio||1,3);
-      const w=Math.floor(window.innerWidth*pixelRatio);
-      const h=Math.floor(window.innerHeight*pixelRatio);
-      hydra.setResolution(w,h);
-    };
-
-    setHydraResolution();
-    window.addEventListener('resize',()=>requestAnimationFrame(setHydraResolution));
 
     // Helpers exposés à Hydra
     window.$breath    = ()=>breath;
@@ -89,9 +78,9 @@
 
     /* ---- MULTI-ANNEAUX : sans multiplication, juste vibration du bruit ---- */
     function ringsMulti(n=9){
-      const fMin = 0.6, fMax = 12.0;
-      const spdMin = 0.02, spdMax = 0.30;
-      const baseR = 0.18, endR = 0.62;
+      const fMin = 0.2, fMax = 10.0;
+      const spdMin = 0.02, spdMax = 0.10;
+      const baseR = 0.1, endR = 0.8;
       const thick = ()=>0.010 + 0.025*$resonance();
 
       let acc = solid(0,0,0,0);
@@ -116,9 +105,9 @@
             .rotate(()=>time*rot())
             .modulate(noise(fNoise, sNoise), ()=> 0.015 + 0.090*$resonance())
             .modulateScale(noise(()=>0.8+0.6*fNoise(), ()=>0.4*sNoise()), ()=> 0.01 + 0.06*$breath())
-            .brightness(0.2)
+            .brightness(0.12)
             .contrast(()=> 1.0 + 1.00*$resonance()*e())
-            .scale(() => 2 + bands.low * 3)
+            .scale(() => 1.5 + bands.low * 3)
             .luma(0.2,1)
             // .saturate(()=> 1.0 + 0.40*e())
             .color(cr, cg, cb);
@@ -129,11 +118,16 @@
       return acc; // pas de multiplication avec cavité
     }
 
+    setResolution(1000,1000);
+    
+
     /* ---- Composition ---- */
     ringsMulti(12)
-      .scale(()=>1.0+0.05*$breath())
-      .luma(()=>0.08+0.10*$H())
+      .scale(()=>1.1+0.05*$breath())
+      .luma(()=>0.008+0.10*$H())
+      // .contrast(1)
       .saturate(()=>1.0+0.4*$resonance())
+      .scale(0.5)
       .out(o0);
 
     render(o0);
