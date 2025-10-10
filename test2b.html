@@ -81,7 +81,7 @@
       const fMin = 0.6, fMax = 12.0;
       const spdMin = 0.02, spdMax = 0.30;
       const baseR = 0.18, endR = 0.62;
-      const thick = ()=>0.010 + 0.025*$resonance();
+      const thick = ()=>0.006 + 0.018*$resonance();
 
       let acc = solid(0,0,0,0);
 
@@ -95,29 +95,56 @@
         const inner = ()=> Math.max(0.01, R() - thick());
         const smooth = ()=> 0.02 + 0.03*$resonance();
 
-        const cr = ()=> 0.35 + 0.65*(0.6*$L() + 0.4*(1-t));
-        const cg = ()=> 0.35 + 0.65*(0.6*$M1() + 0.4*(0.5+0.5*Math.cos(3.1415*t)));
-        const cb = ()=> 0.40 + 0.60*(0.6*$M2() + 0.4*(t));
+        const huePulse = ()=> 0.5 + 0.5*Math.sin(time*0.32 + t*5.4 + $H()*2.6);
+        const cr = ()=> 0.22 + 0.70*(0.55*$L()  + 0.45*huePulse());
+        const cg = ()=> 0.20 + 0.72*(0.55*$M1() + 0.45*(1-huePulse()));
+        const cb = ()=> 0.24 + 0.74*(0.55*$M2() + 0.45*(0.5 + 0.5*Math.sin(time*0.46 + t*4.8 + $resonance()*2.1)));
 
-        const ringTex =
+        const ringBase =
           shape(96,R,smooth)
             .diff(shape(96,inner,smooth))
             .rotate(()=>time*rot())
             .modulate(noise(fNoise, sNoise), ()=> 0.015 + 0.090*$resonance())
             .modulateScale(noise(()=>0.8+0.6*fNoise(), ()=>0.4*sNoise()), ()=> 0.01 + 0.06*$breath())
-            .brightness(() => 0.025)
-            .brightness(() => 0.728)
-            // .contrast(()=> 1.0 + 1.00*$resonance()*e())
-            .scale(() => 4 + bands.low * 6)
-            .luma(0.2,1)
-            .luma(0.2,1)
-            .luma(0.2,1)
-            .luma(0.2,1)
-            .contrast(2)
-            // .saturate(()=> 1.0 + 0.40*e())
-            .color(cr, cg, cb);
+            .brightness(()=> -0.12 + 0.24*e())
+            .contrast(()=> 1.08 + 0.40*$resonance());
 
-        acc = acc.add(ringTex, ()=>0.08 + 0.18*e()); // simple addition (pas de .mult)
+        const blendField =
+          noise(
+            () => 0.9 + 1.8*e(),
+            () => 0.08 + 0.22*$breath() + 0.18*$H()
+          )
+            .color(
+              () => 0.28 + 0.72*(0.5 + 0.5*Math.sin(time*0.32 + t*6.0 + $L()*2.4)),
+              () => 0.24 + 0.76*(0.5 + 0.5*Math.sin(time*0.41 + t*4.6 + $M1()*2.2)),
+              () => 0.30 + 0.70*(0.5 + 0.5*Math.sin(time*0.52 + t*5.2 + $M2()*2.4))
+            )
+            .brightness(()=> -0.35 + 0.28*e())
+            .contrast(()=> 1.20 + 0.50*$resonance());
+
+        const blendSoft =
+          noise(
+            () => 0.6 + 1.2*e(),
+            () => 0.05 + 0.18*$breath()
+          )
+            .color(
+              () => 0.45 + 0.55*$L(),
+              () => 0.40 + 0.60*$M1(),
+              () => 0.48 + 0.52*$H()
+            )
+            .brightness(()=> -0.42 + 0.30*$breath())
+            .contrast(()=> 1.08 + 0.30*$resonance())
+            .colorama(()=> 0.04 + 0.22*$H());
+
+        const ringTex = ringBase
+            .blend(blendField, ()=> 0.18 + 0.40*$resonance()*e())
+            .mult(blendSoft,  ()=> 0.12 + 0.28*$breath())
+            .color(cr, cg, cb)
+            .saturate(()=> 1.00 + 0.45*$resonance())
+            .brightness(()=> -0.08 + 0.18*e())
+            .contrast(()=> 1.15 + 0.40*$resonance());
+
+        acc = acc.add(ringTex, ()=>0.05 + 0.16*e());
       }
 
       return acc; // pas de multiplication avec cavité
