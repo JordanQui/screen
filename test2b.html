@@ -123,9 +123,11 @@
       return acc; // pas de multiplication avec cavité
     }
 
+    // a.setResolution(4000,2000)
+
     /* ---- Composition ---- */
-    ringsMulti(12)
-      .scale(()=>1.0+0.05*$breath())
+    ringsMulti(8)
+      .scale(()=>0.5+0.05*$breath())
       .luma(()=>0.08+0.10*$H())
       .saturate(()=>1.0+0.4*$resonance())
       .out(o0);
