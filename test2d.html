@@ -43,8 +43,8 @@
       resonance += (targetBreath-resonance) * (targetBreath>resonance? 0.10 : 0.035);
 
       colorWarm += (l  - colorWarm) * 0.05;   // L
-      colorGreen+= (m1 - colorGreen)* 0.40;   // M1
-      colorBlue += (m2 - colorBlue) * 0.40;   // M2
+      colorGreen+= (m1 - colorGreen)* 0.55;   // M1
+      colorBlue += (m2 - colorBlue) * 0.55;   // M2
       shimmer   += (h  - shimmer * 2);   // H
 
       requestAnimationFrame(updateEnvelopes);
@@ -64,6 +64,8 @@
     window.$M1= ()=>colorGreen;
     window.$M2= ()=>colorBlue;
     window.$H = ()=>shimmer;
+    const midPulse = ()=>0.5*($M1()+$M2());
+    const midContrast = ()=>Math.abs($M1()-$M2());
 
     // Courbes gaussiennes pour interpolation spectrale
     function bell(x,c,w){ const k=(x-c)/w; return Math.exp(-0.5*k*k); }
@@ -81,7 +83,7 @@
       const fMin = 0.6, fMax = 12.0;
       const spdMin = 0.02, spdMax = 0.30;
       const baseR = 0.18, endR = 0.62;
-      const thick = ()=>0.010 + 0.025*$resonance();
+      const thick = ()=>0.010 + 0.020*$resonance() + 0.015*midPulse();
 
       let acc = solid(0,0,0,0);
 
@@ -90,14 +92,18 @@
         const e = ()=>specAt(t);
         const fNoise = ()=> fMin + (fMax-fMin)*e();
         const sNoise = ()=> spdMin + (spdMax-spdMin)*e();
-        const rot    = ()=> (0.01 + 0.10*$breath())*(t-0.5);
+        const rot    = ()=> (0.01 + 0.10*$breath() + 0.03*midPulse())*(t-0.5);
         const R = ()=> baseR + (endR-baseR)*t;
         const inner = ()=> Math.max(0.01, R() - thick());
         const smooth = ()=> 0.02 + 0.03*$resonance();
 
-        const cr = ()=> 0.35 + 0.65*(0.6*$L() + 0.4*(1-t));
-        const cg = ()=> 0.35 + 0.65*(0.6*$M1() + 0.4*(0.5+0.5*Math.cos(3.1415*t)));
-        const cb = ()=> 0.40 + 0.60*(0.6*$M2() + 0.4*(t));
+        const midFocus = ()=> midPulse()*(1-Math.abs(2*t-1));
+        const midEdge  = ()=> midPulse()*Math.abs(2*t-1);
+        const cr = ()=> 0.33 + 0.67*(0.55*$L() + 0.25*midPulse() + 0.20*(1-t));
+        const cg = ()=> 0.24 + 0.76*Math.min(1,
+          0.15*$L() + 0.90*$M1() + 0.30*midFocus());
+        const cb = ()=> 0.28 + 0.72*Math.min(1,
+          0.15*$H() + 0.90*$M2() + 0.30*midEdge());
 
         setResolution(1000,500);
 
@@ -106,13 +112,14 @@
             .diff(shape(96,inner,smooth))
             .rotate(()=>time*rot())
             .modulate(noise(fNoise, sNoise), ()=> 0.015 + 0.090*$resonance())
-            .modulateScale(noise(()=>0.8+0.6*fNoise(), ()=>0.4*sNoise()), ()=> 0.01 + 0.06*$breath())
-            .brightness(() => 0.025)
-            .brightness(() => 0.1)
+            .modulateScale(noise(()=>0.8+0.6*fNoise(), ()=>0.4*sNoise()), ()=> 0.02 + 0.04*$breath() + 0.05*midPulse())
+            .modulateRotate(noise(()=>2.5+midPulse()*1.5, ()=>0.08+0.20*midPulse()), ()=>0.01 + 0.04*midPulse())
+            .brightness(() => 0.02 + 0.18*midFocus())
             // .contrast(()=> 1.0 + 1.00*$resonance()*e())
-            .scale(() => 4 + bands.low * 2)
-            .contrast(2)
-            // .saturate(()=> 1.0 + 0.40*e())
+            .scale(() => 3.8 + bands.low * 1.8 + midPulse()*1.2)
+            .contrast(2.1)
+            .saturate(()=> 1.0 + 0.25*$resonance() + 0.65*midPulse())
+            .colorama(()=>0.08*midContrast())
             .color(cr, cg, cb);
 
         acc = acc.add(ringTex, ()=>0.08 + 0.18*e()); // simple addition (pas de .mult)
