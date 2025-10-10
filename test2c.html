@@ -31,6 +31,11 @@
     let breath=0,resonance=0;
     let colorWarm=0,colorGreen=0,colorBlue=0,shimmer=0;
 
+    function follow(current,target,attack,release){
+      const rate = target>current ? attack : release;
+      return current + (target-current)*rate;
+    }
+
     function updateEnvelopes(){
       const stale = (performance.now()-lastBandT)>250;
       const l = stale?0:bands.low;
@@ -39,13 +44,13 @@
       const h = stale?0:bands.high;
 
       const targetBreath = Math.max(l,m1,m2,h);
-      breath    += (targetBreath-breath)    * (targetBreath>breath ? 0.50 : 0.15);
-      resonance += (targetBreath-resonance) * (targetBreath>resonance? 0.10 : 0.035);
+      breath    = follow(breath,targetBreath,0.55,0.18);
+      resonance = follow(resonance,targetBreath,0.18,0.06);
 
-      colorWarm += (l  - colorWarm) * 0.05;   // L
-      colorGreen+= (m1 - colorGreen)* 0.40;   // M1
-      colorBlue += (m2 - colorBlue) * 0.40;   // M2
-      shimmer   += (h  - shimmer * 2);   // H
+      colorWarm  = follow(colorWarm ,Math.pow(l ,0.85),0.18,0.04); // L
+      colorGreen = follow(colorGreen,Math.pow(m1,0.90),0.42,0.08); // M1
+      colorBlue  = follow(colorBlue ,Math.pow(m2,0.90),0.42,0.08); // M2
+      shimmer    = follow(shimmer   ,Math.pow(h ,0.80),0.60,0.15); // H
 
       requestAnimationFrame(updateEnvelopes);
     }
@@ -95,9 +100,10 @@
         const inner = ()=> Math.max(0.01, R() - thick());
         const smooth = ()=> 0.02 + 0.03*$resonance();
 
-        const cr = ()=> 0.35 + 0.65*(0.6*$L() + 0.4*(1-t));
-        const cg = ()=> 0.35 + 0.65*(0.6*$M1() + 0.4*(0.5+0.5*Math.cos(3.1415*t)));
-        const cb = ()=> 0.40 + 0.60*(0.6*$M2() + 0.4*(t));
+        const warmRamp  = ()=> 0.35 + 0.65*(0.65*$L()  + 0.35*(1-t));
+        const greenRamp = ()=> 0.30 + 0.70*(0.75*$M1() + 0.25*(0.5+0.5*Math.cos(3.1415*t)));
+        const blueRamp  = ()=> 0.30 + 0.70*(0.80*$M2() + 0.20*(t));
+        const chromaPulse = ()=> 0.9 + 0.8*(0.4*$M1()+0.6*$M2())*e();
 
         const ringTex =
           shape(96,R,smooth)
@@ -114,8 +120,8 @@
             .luma(0.2,1)
             .luma(0.2,1)
             .contrast(2)
-            // .saturate(()=> 1.0 + 0.40*e())
-            .color(cr, cg, cb);
+            .saturate(()=> chromaPulse())
+            .color(warmRamp, greenRamp, blueRamp);
 
         acc = acc.add(ringTex, ()=>0.08 + 0.18*e()); // simple addition (pas de .mult)
       }
