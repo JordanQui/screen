@@ -82,7 +82,7 @@ function buildPatch(){
 
   /* Base oscillatoire (faible contraste) */
   const base =
-    osc(fLow, 0, (L()+M1()+M2())*0.2 - Hsoft()*0.5)
+    osc(fLow, 0, (L()+M1()+M2())*0.2 - Hsoft()*12.5)
       .add( osc(fM1, 0, 1), 0.6 )
       .add( osc(fM2, 0, 1), 0.6 )
       .contrast(1.02)
@@ -110,7 +110,7 @@ function buildPatch(){
 
   /* Modulations : s’ouvrent avec FB_G(), restent très douces au silence */
   let mix = base
-    .modulate(field, () => (0.005 + (L()+M1()+M2())*0.01 + Hsoft()*0.02) * FB_G()) // ~0 au silence
+    .modulate(field, () => (0.005 + (L()+M1()+M2())*0.01 + Hsoft()*0.02) * FB_G()* 0.2) // ~0 au silence
     .add( fineNoise, () => (0.02 + Hsoft()*0.15) * FB_G() )                         // grain
     .contrast(() => 1.01 + E()*0.05)
     .brightness(() => -0.06 + E()*0.04);
@@ -128,17 +128,13 @@ function buildPatch(){
   mix = mix
     // .diff(fb, fbAmt1)    // relief/edges
     .add (fb, fbAmt2)    // rémanence
-<<<<<<<< HEAD:RONDE_INSTA/ronde(1)c.html
-    // .colorama(0.75,0.2,0.2)
-    .brightness(-0.5)
-    // .scale(() => 0.5 + (L()+M1()+M2())*0.2 - Hsoft()*1)
-========
-    .colorama(0.1,0.02,0.03)
+    .colorama(0.91,0.16,0.913)
     .scale(() => 1 - (L()+M1()+M2())*0.1 + Hsoft()*0.9)
->>>>>>>> refs/remotes/origin/main:RONDE_INSTA/ronde(1)D.html
     // .saturate(0)         // === NOIR & BLANC ===
-    // .gamma(() => 0.96 + E()*0.06)      // légère tension avec l’énergie
-    .luma(() => 0.75 + (E()-0.5)*0.10)  // recentre la luminance
+    .gamma(() => 0.96 + E()*0.06)      // légère tension avec l’énergie
+    .luma(() => 0.8 + (E()+0.5)*0.40)  // recentre la luminance
+    .kaleid(7) 
+    .rotate(1.5,1)
     .out(o0);
 }
 buildPatch();

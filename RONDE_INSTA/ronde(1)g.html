@@ -128,14 +128,8 @@ function buildPatch(){
   mix = mix
     // .diff(fb, fbAmt1)    // relief/edges
     .add (fb, fbAmt2)    // rémanence
-<<<<<<<< HEAD:RONDE_INSTA/ronde(1)c.html
-    // .colorama(0.75,0.2,0.2)
-    .brightness(-0.5)
-    // .scale(() => 0.5 + (L()+M1()+M2())*0.2 - Hsoft()*1)
-========
     .colorama(0.1,0.02,0.03)
     .scale(() => 1 - (L()+M1()+M2())*0.1 + Hsoft()*0.9)
->>>>>>>> refs/remotes/origin/main:RONDE_INSTA/ronde(1)D.html
     // .saturate(0)         // === NOIR & BLANC ===
     // .gamma(() => 0.96 + E()*0.06)      // légère tension avec l’énergie
     .luma(() => 0.75 + (E()-0.5)*0.10)  // recentre la luminance

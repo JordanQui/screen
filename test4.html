@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Hydra • Variation 3D soft — bands from shell (Hi-DPI, couleurs + feedback)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <style>
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    canvas { position:fixed; inset:0; width:100vw; height:100vh; display:block; background:#000; }
+  </style>
+  <script src="../hydra/hydra.js"></script>
+</head>
+<body>
+<canvas id="hydra"></canvas>
+<script>
+/* ===== Reçoit les 4 bandes du shell (AUCUN micro ici) ===== */
+let low=0, mid1=0, mid2=0, high=0;
+addEventListener('message',(e)=>{
+  const d=e.data; if(!d) return;
+  if (d.type === 'bands') {
+    low  = d.low  || 0;
+    mid1 = d.mid1 || 0;
+    mid2 = d.mid2 || 0;
+    high = d.high || 0;
+  }
+});
+
+/* ===== Hi-DPI ===== */
+const canvas = document.getElementById('hydra');
+function setHiRes(){
+  const dpr = Math.min(3.0, window.devicePixelRatio || 1);
+  const w = Math.floor(innerWidth * dpr);
+  const h = Math.floor(innerHeight * dpr);
+  canvas.width = w;
+  canvas.height = h;
+  if (window.hydra?.setResolution) window.hydra.setResolution(w, h);
+}
+setHiRes();
+const hydra = new Hydra({
+  canvas,
+  detectAudio: false,
+  width: canvas.width,
+  height: canvas.height,
+  pixelRatio: 1
+});
+window.hydra = hydra;
+addEventListener('resize', setHiRes);
+
+/* ===== Aliases bandes ===== */
+const L  = () => low;
+const M1 = () => mid1;
+const M2 = () => mid2;
+const Hh = () => high;
+
+/* ===== Gate de silence (lissage attack/release) ===== */
+const NOISE_FLOOR   = 0.02; // niveau minimal à ignorer
+const SILENCE_GATE  = 0.06; // seuil d’ouverture du FB/modulations
+const ATTACK_COEF   = 0.30; // plus grand = plus rapide à l'ouverture
+const RELEASE_COEF  = 0.06; // plus petit = plus lent à la fermeture
+
+let eSmooth = 0; // énergie lissée (0..1)
+
+function updateEnergy(){
+  const hsoft = Math.pow(Math.max(0, Hh()), 0.75);
+  const raw = Math.max(L(), M1(), M2(), hsoft);
+
+  // retire le bruit de fond puis normalise
+  const above  = Math.max(0, raw - NOISE_FLOOR) / (1 - NOISE_FLOOR);
+  const target = Math.min(1, above);
+
+  const coef = (target > eSmooth) ? ATTACK_COEF : RELEASE_COEF;
+  eSmooth += (target - eSmooth) * coef;
+
+  requestAnimationFrame(updateEnergy);
+}
+updateEnergy();
+
+const FB_G = () => {
+  const x = Math.max(0, eSmooth - SILENCE_GATE) / (1 - SILENCE_GATE);
+  return Math.pow(x, 1.2); // courbe douce
+};
+const E = () => eSmooth;
+
+/* ===== Souris (utilisée seulement pour des scrolls subtils) ===== */
+let mx = 0.5;
+let my = 0.5;
+addEventListener('mousemove', (e) => {
+  mx = e.clientX / window.innerWidth;
+  my = e.clientY / window.innerHeight;
+});
+
+/* ===== Patch Hydra — sans rotate, sans kaleid ===== */
+function buildPatch(){
+  const Hsoft = () => Math.pow(Math.max(0, Hh()), 0.75);
+
+  // Oscillateur principal : anneaux / bandes concentriques
+  const tunnel =
+    osc(
+      () => 8 + 16 * E(),              // fréquence → densité des anneaux
+      () => 0.02 + 0.06 * E(),         // vitesse de phase
+      () => 0.2 + 0.3 * Hsoft()        // épaisseur liée aux aigus
+    )
+    // Jeu de couleurs bindé aux bandes
+    .color(
+      () => 0.25 + 0.9 * L(),          // basses → rouge
+      () => 0.25 + 0.9 * M2(),         // mid2 → vert
+      () => 0.25 + 0.9 * Hsoft()       // aigus → bleu
+    )
+    .colorama(() => 0.05 * M1())       // mid1 tord la phase couleur
+    .brightness(-0.20)
+    .contrast(1.15);
+
+  // Champ de bruit = profondeur / distorsion
+  const depthNoise =
+    noise(
+      () => 0.8 + (L() + M1()) * 1.8,  // grain large piloté bass + mid1
+      () => 0.05 + 0.25 * M2()         // vitesse liée à mid2
+    )
+    // .scrollX(() => (mx - 0.5) * 0.25 * FB_G())
+    // .scrollY(() => (my - 0.5) * 0.25 * FB_G())
+    .contrast(() => 1.1 + 0.2 * E());
+
+  // Tunnel modulé par le champ de bruit
+  let scene =
+    tunnel
+      .modulateScale(
+        depthNoise,
+        () => 0.10 * FB_G() + 0.04 * E()   // plus d’énergie → plus de profondeur
+      )
+      .scale(() =>
+        0.95
+        + 0.06 * Math.sin(time * 0.4)      // respiration douce permanente
+        + 0.12 * E()                       // zoom avec l’énergie
+      )
+      .brightness(() => -0.16 + 0.12 * E())
+      .contrast(() => 1.08 + 0.12 * E());
+
+  // Feedback (sans rotate, pure échelle + modulation)
+  const fb =
+    src(o0)
+      // .scale(() => 0.97 - 0.06 * FB_G())   // zoom léger quand ça joue
+      .modulate(depthNoise, () => 0.06 * FB_G())
+      .brightness(-0.03)
+      .contrast(1.01);
+
+  const fbAmt = () => (0.08 + 0.25 * E()) * FB_G();
+
+  scene
+    .add(fb, fbAmt)                        // pas de FB au silence
+    .saturate(() => 1.0 + 0.8 * E())       // plus d’énergie → couleur plus vive
+    .contrast(() => 1.05 + 0.12 * E())
+    .brightness(() => -0.02 + 0.06 * E())
+    .rotate(1.57)
+    .luma(() => 0.01 + 0.02 * E())          // garde une base lisible
+    .out(o0);
+}
+
+buildPatch();
+render(o0);
+
+/* ===== Signal “paint-hot” au shell ===== */
+requestAnimationFrame(() => parent.postMessage({ type:'paint-hot' }, '*'));
+</script>
+</body>
+</html>
