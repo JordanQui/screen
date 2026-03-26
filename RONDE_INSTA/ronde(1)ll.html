@@ -21,16 +21,14 @@ addEventListener('message',(e)=>{
   if (d.type==='bands'){ low=d.low||0; mid1=d.mid1||0; mid2=d.mid2||0; high=d.high||0; }
 });
 
-/* ===== Hi-DPI ===== */
+/* ===== Résolution fixe 1000×1000 ===== */
 const canvas = document.getElementById('hydra');
 function setHiRes(){
-  const dpr = Math.min(3.0, window.devicePixelRatio||1);
-  const w = Math.floor(innerWidth * dpr), h = Math.floor(innerHeight * dpr);
-  canvas.width = w; canvas.height = h;
-  if (window.hydra?.setResolution) window.hydra.setResolution(w, h);
+  canvas.width = 1000; canvas.height = 1000;
+  if (window.hydra?.setResolution) window.hydra.setResolution(1000, 1000);
 }
 setHiRes();
-const hydra = new Hydra({ canvas, detectAudio:false, width:canvas.width, height:canvas.height, pixelRatio:1 });
+const hydra = new Hydra({ canvas, detectAudio:false, width:1000, height:1000, pixelRatio:1 });
 window.hydra = hydra;
 addEventListener('resize', setHiRes);
 
@@ -41,7 +39,7 @@ const M2 = () => mid2;
 const Hh = () => high;
 
 /* ===== Gate de silence (lissage attack/release) ===== */
-const NOISE_FLOOR   = 0.02;  // niveau minimal à ignorer
+const NOISE_FLOOR   = 0.08;  // niveau minimal à ignorer
 const SILENCE_GATE  = 0.06;  // seuil d’ouverture du FB/modulations
 const ATTACK_COEF   = 0.30;  // plus grand = plus rapide à l'ouverture
 const RELEASE_COEF  = 0.06;  // plus petit = plus lent à la fermeture
@@ -133,7 +131,7 @@ function buildPatch(){
     .scrollX(-0.4)
     // .saturate(0)         // === NOIR & BLANC ===
     // .gamma(() => 0.96 + E()*0.06)      // légère tension avec l’énergie
-    .luma(() => 0.5 + (E()+0.2)*0.10)  // recentre la luminance
+    .luma(() => -10.5 + (E()+0.2)*0.10)  // recentre la luminance
     // .kaleid(7) 
     // .rotate(1.5,1)
     .out(o0);
