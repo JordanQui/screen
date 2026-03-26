@@ -104,8 +104,8 @@ const fHigh = 20;
 
 /* ===== Grain doux commun ===== */
 const softNoise = noise(
-  () => 0.2 + (Mv1()+Mv2()+Hv())*0.6,
-  () => 0.08 + Hv()*0.30
+  () => 0.2 + (Mv1()+Mv2()+Hv())*5,
+  () => 0.08 + Hv()*2
 );
 
 /* ===== Profondeurs de modulation (accentuées) ===== */
