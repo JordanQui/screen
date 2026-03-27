@@ -100,8 +100,6 @@ function cleanup() {
   patchCtrl = null
   resizeObserver?.disconnect()
   resizeObserver = null
-  // Hydra doesn't have a clean destroy, but stopping loops helps
-  try { hydraInstance?.synth?.screencap?.() } catch {}
   hydraInstance = null
 }
 

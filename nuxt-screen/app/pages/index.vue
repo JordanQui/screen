@@ -1,79 +1,86 @@
 <template>
-  <div class="shell-stack">
-    <ClientOnly>
-      <HydraCanvas
-        :key="cycleKey"
-        :patch-factory="currentPatch"
-        :bands="bands"
-        @ready="onPatchReady"
-      />
-    </ClientOnly>
+  <div class="patch-index">
+    <h1>Patches</h1>
+
+    <section>
+      <h2>Waves</h2>
+      <ul>
+        <li><NuxtLink to="/waves/wav1">wav1</NuxtLink></li>
+        <li><NuxtLink to="/waves/wav2">wav2</NuxtLink></li>
+        <li><NuxtLink to="/waves/wav3a">wav3a</NuxtLink></li>
+        <li><NuxtLink to="/waves/wav4a">wav4a</NuxtLink></li>
+        <li><NuxtLink to="/waves/wav5e">wav5e</NuxtLink></li>
+        <li><NuxtLink to="/waves/wav6a">wav6a</NuxtLink></li>
+        <li><NuxtLink to="/waves/wav7c">wav7c</NuxtLink></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Circles</h2>
+      <ul>
+        <li><NuxtLink to="/circles/circles1">circles1</NuxtLink></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Ronde Insta</h2>
+      <ul>
+        <li><NuxtLink to="/ronde-insta/ronde1g">ronde1g</NuxtLink></li>
+        <li><NuxtLink to="/ronde-insta/ronde1i">ronde1i</NuxtLink></li>
+        <li><NuxtLink to="/ronde-insta/ronde1j">ronde1j</NuxtLink></li>
+        <li><NuxtLink to="/ronde-insta/ronde1ll">ronde1ll</NuxtLink></li>
+        <li><NuxtLink to="/ronde-insta/ronde1mzoomed">ronde1mzoomed</NuxtLink></li>
+      </ul>
+    </section>
   </div>
 </template>
 
-<script setup lang="ts">
-import type { HydraBandValues, PatchFactory } from '~/utils/hydra/types'
-import { createWav1Patch } from '~/utils/hydra/wav1Patch'
-import { createWav2Patch } from '~/utils/hydra/wav2Patch'
-import { createWav3aPatch } from '~/utils/hydra/wav3aPatch'
-import { createWav4aPatch } from '~/utils/hydra/wav4aPatch'
-import { createWav5ePatch } from '~/utils/hydra/wav5ePatch'
-import { createWav6aPatch } from '~/utils/hydra/wav6aPatch'
-import { createWav7cPatch } from '~/utils/hydra/wav7cPatch'
-import { createCircles1Patch } from '~/utils/hydra/circles1Patch'
-import { createRonde1gPatch } from '~/utils/hydra/ronde1gPatch'
-import { createRonde1iPatch } from '~/utils/hydra/ronde1iPatch'
-import { createRonde1jPatch } from '~/utils/hydra/ronde1jPatch'
-import { createRonde1llPatch } from '~/utils/hydra/ronde1llPatch'
-import { createRonde1mzoomedPatch } from '~/utils/hydra/ronde1mzoomedPatch'
-
-const bands = inject<HydraBandValues>('audioBands', reactive({ low: 0, mid1: 0, mid2: 0, high: 0 }))
-const swapIntervalMs = inject<number>('swapIntervalMs', 500000)
-
-const patches: PatchFactory[] = [
-  createWav1Patch,
-  createWav2Patch,
-  createWav3aPatch,
-  createWav4aPatch,
-  createWav5ePatch,
-  createWav6aPatch,
-  createWav7cPatch,
-  createCircles1Patch,
-  createRonde1gPatch,
-  createRonde1iPatch,
-  createRonde1jPatch,
-  createRonde1llPatch,
-  createRonde1mzoomedPatch,
-]
-
-const patchIndex = ref(0)
-const cycleKey = ref(0)
-const currentPatch = computed(() => patches[patchIndex.value % patches.length])
-
-let swapTimer: ReturnType<typeof setInterval> | null = null
-
-function onPatchReady() {
-  // patch rendered first frame
-}
-
-function nextPatch() {
-  patchIndex.value = (patchIndex.value + 1) % patches.length
-  cycleKey.value++
-}
-
-onMounted(() => {
-  swapTimer = setInterval(nextPatch, swapIntervalMs)
-})
-
-onBeforeUnmount(() => {
-  if (swapTimer) clearInterval(swapTimer)
-})
-</script>
-
 <style scoped>
-.shell-stack {
-  position: fixed;
-  inset: 0;
-  background: #000;
+.patch-index {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: monospace;
+  color: #e0e0e0;
+  background: #111;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #333;
+  padding-bottom: 0.5rem;
+}
+
+h2 {
+  font-size: 1rem;
+  color: #888;
+  margin: 1.2rem 0 0.5rem;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+li a {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #ccc;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+li a:hover {
+  background: #2a2a2a;
+  border-color: #555;
+  color: #fff;
 }
 </style>

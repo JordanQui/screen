@@ -8,11 +8,25 @@
 const config = useRuntimeConfig()
 const { bands, start, stop } = useAudioBands({ micResetMs: config.public.micResetMs as number })
 
-provide('audioBands', bands)
-provide('swapIntervalMs', config.public.swapIntervalMs)
+const reloadKey = ref(0)
 
-onMounted(() => start())
-onBeforeUnmount(() => stop())
+provide('audioBands', bands)
+provide('reloadKey', reloadKey)
+
+let reloadTimer: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  start()
+  const ms = config.public.reloadIntervalMs as number
+  if (ms > 0) {
+    reloadTimer = setInterval(() => { reloadKey.value++ }, ms)
+  }
+})
+
+onBeforeUnmount(() => {
+  stop()
+  if (reloadTimer) clearInterval(reloadTimer)
+})
 </script>
 
 <style scoped>

@@ -1,16 +1,18 @@
 <template>
   <div class="patch-page">
     <ClientOnly>
-      <HydraCanvas :patch-factory="createWav5ePatch" :bands="bands" />
+      <HydraCanvas :key="reloadKey" :patch-factory="createWav5ePatch" :bands="bands" />
     </ClientOnly>
   </div>
 </template>
 
 <script setup lang="ts">
+import type { Ref } from 'vue'
 import type { HydraBandValues } from '~/utils/hydra/types'
 import { createWav5ePatch } from '~/utils/hydra/wav5ePatch'
 
 const bands = inject<HydraBandValues>('audioBands', reactive({ low: 0, mid1: 0, mid2: 0, high: 0 }))
+const reloadKey = inject<Ref<number>>('reloadKey', ref(0))
 </script>
 
 <style scoped>
