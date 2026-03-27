@@ -15,7 +15,7 @@
       </ul>
     </section>
 
-    <section>
+    <!-- <section>
       <h2>Ronde Insta</h2>
       <ul>
         <li><NuxtLink to="/ronde-insta/ronde1g">ronde1g</NuxtLink></li>
@@ -24,7 +24,7 @@
         <li><NuxtLink to="/ronde-insta/ronde1ll">ronde1ll</NuxtLink></li>
         <li><NuxtLink to="/ronde-insta/ronde1mzoomed">ronde1mzoomed</NuxtLink></li>
       </ul>
-    </section>
+    </section> -->
   </div>
 </template>
 
