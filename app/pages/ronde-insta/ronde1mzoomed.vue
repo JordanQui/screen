@@ -1,7 +1,7 @@
 <template>
   <div class="patch-page">
     <ClientOnly>
-      <HydraCanvas :key="reloadKey" :patch-factory="createRonde1mzoomedPatch" :bands="bands" />
+      <HydraCanvas :reload-token="reloadKey" :patch-factory="createRonde1mzoomedPatch" :bands="bands" />
     </ClientOnly>
   </div>
 </template>
