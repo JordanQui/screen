@@ -132,6 +132,7 @@ watch(
   background: #111;
   color: #f3f3f3;
   font-family: inherit;
+  font-size: 16px;
   outline: none;
 }
 
