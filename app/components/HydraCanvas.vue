@@ -17,6 +17,8 @@ const canvasEl = ref<HTMLCanvasElement | null>(null)
 let hydraInstance: any = null
 let patchCtrl: HydraPatchController | null = null
 let bandLoop: number | null = null
+let hydraLoop: number | null = null
+let lastHydraTick = 0
 let resizeObserver: ResizeObserver | null = null
 
 function resolveApi(hydra: any): HydraApi | null {
@@ -48,7 +50,7 @@ async function init() {
     canvas,
     detectAudio: false,
     makeGlobal: false,
-    autoLoop: true,
+    autoLoop: false,
     width: w,
     height: h,
     pixelRatio: 1,
@@ -65,6 +67,18 @@ async function init() {
 
   patchCtrl = props.patchFactory(api)
 
+  const startHydraLoop = () => {
+    lastHydraTick = performance.now()
+    const step = (now: number) => {
+      if (!hydraInstance) return
+      const dt = now - lastHydraTick
+      lastHydraTick = now
+      hydraInstance.tick?.(dt)
+      hydraLoop = requestAnimationFrame(step)
+    }
+    hydraLoop = requestAnimationFrame(step)
+  }
+
   // Push bands to patch every frame
   const pushBands = () => {
     patchCtrl?.setBands({
@@ -76,6 +90,8 @@ async function init() {
     bandLoop = requestAnimationFrame(pushBands)
   }
   bandLoop = requestAnimationFrame(pushBands)
+
+  startHydraLoop()
 
   // Resize handling
   const resize = () => {
@@ -96,10 +112,14 @@ async function init() {
 function cleanup() {
   if (bandLoop !== null) cancelAnimationFrame(bandLoop)
   bandLoop = null
+  if (hydraLoop !== null) cancelAnimationFrame(hydraLoop)
+  hydraLoop = null
   patchCtrl?.stop()
   patchCtrl = null
   resizeObserver?.disconnect()
   resizeObserver = null
+  try { hydraInstance?.synth?.hush?.() } catch {}
+  try { hydraInstance?.regl?.destroy?.() } catch {}
   hydraInstance = null
 }
 
