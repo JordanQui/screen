@@ -14,7 +14,7 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   runtimeConfig: {
     public: {
-      reloadIntervalMs: 600000,
+      reloadIntervalMs: 6000000,
       micResetMs: 240000,
     },
   },
