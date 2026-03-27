@@ -2,8 +2,8 @@ import type { HydraBandValues } from '~/utils/hydra/types'
 
 const FFT_SIZE = 512
 const SENS_GAIN = 1.0
-const NOISE_FLOOR = 0.005
-const GAIN = 7.0
+const NOISE_FLOOR = 0.15
+const GAIN = 2.0
 const GAMMA = 0.7
 const ATTACK = 1.00
 const RELEASE_BASE = 0.03
