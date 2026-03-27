@@ -5,20 +5,13 @@
     <section>
       <h2>Waves</h2>
       <ul>
-        <li><NuxtLink to="/waves/wav1">wav1</NuxtLink></li>
-        <li><NuxtLink to="/waves/wav2">wav2</NuxtLink></li>
-        <li><NuxtLink to="/waves/wav3a">wav3a</NuxtLink></li>
-        <li><NuxtLink to="/waves/wav4a">wav4a</NuxtLink></li>
-        <li><NuxtLink to="/waves/wav5e">wav5e</NuxtLink></li>
+        <!-- <li><NuxtLink to="/waves/wav1">wav1</NuxtLink></li> -->
+        <!-- <li><NuxtLink to="/waves/wav2">wav2</NuxtLink></li> -->
+        <!-- <li><NuxtLink to="/waves/wav3a">wav3a</NuxtLink></li> -->
+        <!-- <li><NuxtLink to="/waves/wav4a">wav4a</NuxtLink></li> -->
+        <!-- <li><NuxtLink to="/waves/wav5e">wav5e</NuxtLink></li> -->
         <li><NuxtLink to="/waves/wav6a">wav6a</NuxtLink></li>
         <li><NuxtLink to="/waves/wav7c">wav7c</NuxtLink></li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>Circles</h2>
-      <ul>
-        <li><NuxtLink to="/circles/circles1">circles1</NuxtLink></li>
       </ul>
     </section>
 

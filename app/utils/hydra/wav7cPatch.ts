@@ -14,7 +14,7 @@ export const createWav7cPatch = (api: HydraApi): HydraPatchController => {
     v = Math.pow(Math.max(0, v), 0.65)
     v = Math.min(1, Math.max(0, v))
     const p = _prev[key] || 0
-    const s = p + (v - p) * (v > p ? 0.55 : 0.07)
+    const s = p + (v - p) * (v > p ? 0.55 : 0.45)
     _prev[key] = s
     return s
   }
@@ -22,7 +22,7 @@ export const createWav7cPatch = (api: HydraApi): HydraPatchController => {
 
   let _Lv = 0, _Mv1 = 0, _Mv2 = 0, _Hv = 0, _Hsens = 0
   const H_GAIN = 1.8, H_GAMMA = 0.60
-  const NOISE_FLOOR = 0.02, SILENCE_GATE = 0.06, ATTACK_COEF = 0.30, RELEASE_COEF = 0.06
+  const NOISE_FLOOR = 0.02, SILENCE_GATE = 0.06, ATTACK_COEF = 0.30, RELEASE_COEF = 0.35
   let energy = 0
 
   const updateBands = () => {
