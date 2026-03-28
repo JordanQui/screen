@@ -2,6 +2,7 @@ import type { HydraBandValues } from '~/utils/hydra/types'
 
 const FFT_SIZE = 512
 const SENS_GAIN = 1.0
+const IOS_MOBILE_GAIN_MULTIPLIER = 4
 const NOISE_FLOOR = 0.1
 const GAIN = 3.0
 const GAMMA = 0.7
@@ -9,6 +10,21 @@ const ATTACK = 1.00
 const RELEASE_BASE = 0.03
 const SILENCE_GATE = 0.015
 const SILENCE_FRAMES = 2
+
+function isIOSMobile(): boolean {
+  if (typeof navigator === 'undefined' || typeof window === 'undefined') return false
+  const ua = navigator.userAgent || ''
+  const platform = navigator.platform || ''
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  const uaDataMobile = typeof (navigator as any).userAgentData?.mobile === 'boolean'
+    ? (navigator as any).userAgentData.mobile
+    : false
+  const coarsePointer = typeof window.matchMedia === 'function'
+    ? window.matchMedia('(pointer: coarse)').matches
+    : false
+  const isMobile = /Mobi|iPhone|iPod|iPad/.test(ua) || uaDataMobile || coarsePointer
+  return isIOS && isMobile
+}
 
 export function useAudioBands(options?: { micResetMs?: number }) {
   const micResetMs = options?.micResetMs ?? 240000
@@ -193,7 +209,8 @@ export function useAudioBands(options?: { micResetMs?: number }) {
       const src = ctx.createMediaStreamSource(stream)
 
       pre = ctx.createGain()
-      pre.gain.value = SENS_GAIN
+      const micGain = isIOSMobile() ? SENS_GAIN * IOS_MOBILE_GAIN_MULTIPLIER : SENS_GAIN
+      pre.gain.value = micGain
       zeroOut = ctx.createGain()
       zeroOut.gain.value = 0.0
       zeroOut.connect(ctx.destination)
