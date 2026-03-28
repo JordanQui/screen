@@ -7,7 +7,7 @@ const GAIN = 3.0
 const GAMMA = 0.7
 const ATTACK = 1.00
 const RELEASE_BASE = 0.03
-const SILENCE_GATE = 0.02
+const SILENCE_GATE = 0.015
 const SILENCE_FRAMES = 2
 
 export function useAudioBands(options?: { micResetMs?: number }) {
