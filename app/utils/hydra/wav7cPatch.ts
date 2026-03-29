@@ -9,7 +9,7 @@ export const createWav7cPatch = (api: HydraApi): HydraPatchController => {
   const setBands = (b: HydraBandValues) => { bands = { ...b } }
 
   function processBand(raw: number): number {
-    let v = Math.max(0, raw - 0.005) * 22.0
+    let v = Math.max(0, raw - 0.005) * 1.0
     v = Math.pow(Math.max(0, v), 0.65)
     return Math.min(1, Math.max(0, v))
   }
@@ -60,16 +60,16 @@ export const createWav7cPatch = (api: HydraApi): HydraPatchController => {
   // Chaque bande colore son oscillateur (couleur brute = reactive)
   // LOW — rouge/orange chaud
   const oscLo = osc(() => fLow(), 0, () => sLv() * 0.25)
-    .color(() => 1.0 + Lv() * 2.0, () => 1.0 - Lv() * 0.4, () => 1.0 - Lv() * 0.6)
+    .color(() => Lv() * 3.0, () => Lv() * 0.6, () => Lv() * 0.4)
   // MID1 — jaune/peche
   const oscM1 = osc(fM1, 0, 1)
-    .color(() => 1.0 + Mv1() * 1.5, () => 1.0 + Mv1() * 0.8, () => 1.0 - Mv1() * 0.5)
+    .color(() => Mv1() * 2.5, () => Mv1() * 1.8, () => Mv1() * 0.5)
   // MID2 — cyan/turquoise
   const oscM2 = osc(fM2, 0, 1)
-    .color(() => 1.0 - Mv2() * 0.5, () => 1.0 + Mv2() * 1.2, () => 1.0 + Mv2() * 1.5)
+    .color(() => Mv2() * 0.5, () => Mv2() * 2.2, () => Mv2() * 2.5)
   // HIGH — violet/magenta
   const oscHi = osc(() => 60 + sHs() * 50, () => 0.02 + sHs() * 0.12, () => sHs() * 32)
-    .color(() => 1.0 + Hsens() * 1.5, () => 1.0 - Hsens() * 0.6, () => 1.0 + Hsens() * 2.2)
+    .color(() => Hsens() * 2.5, () => Hsens() * 0.4, () => Hsens() * 3.2)
 
   const base = oscLo
     .add(oscM1, 0.6)
@@ -100,11 +100,11 @@ export const createWav7cPatch = (api: HydraApi): HydraPatchController => {
         .contrast(() => 1.003 + Hsens() * 0.005),
       () => Math.min(0.38, (0.06 + (sLv() + sMv1()) * 0.18) * FB_G()),
     )
-    .brightness(-0.25)
+    .brightness(-0.22)
     .luma(() => 0.75 - sHs() * 0.45 + sLv() * 0.05)
-    .blend(o0)
+    .blend(o0, () => 0.18 + E() * 0.25)
     .scale(() => 5 + sLv() * 1.5)
-    .scale(0.4)
+    .scale(0.6)
     .out(o0)
 
   render(o0)

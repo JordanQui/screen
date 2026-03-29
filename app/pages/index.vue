@@ -13,6 +13,7 @@
         <li><NuxtLink to="/waves/wav6a">wav6a</NuxtLink></li>
         <li><NuxtLink to="/waves/wav7c">wav7c</NuxtLink></li>
         <li><NuxtLink to="/waves/wav8">wav8</NuxtLink></li>
+        <li><NuxtLink to="/waves/wav9">wav9</NuxtLink></li>
       </ul>
     </section>
 

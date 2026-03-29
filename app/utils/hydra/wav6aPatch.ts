@@ -8,7 +8,6 @@ export const createWav6aPatch = (api: HydraApi): HydraPatchController => {
   let frameId: number | null = null
   const setBands = (b: HydraBandValues) => { bands = { ...b } }
 
-  // --- Lissage par bande avec gate silence ---
   const NOISE_FLOOR = 0.003
   const ATTACK = 0.50, RELEASE = 0.96
   const SILENCE_GATE = 0.010, SILENCE_FRAMES = 3
@@ -27,7 +26,7 @@ export const createWav6aPatch = (api: HydraApi): HydraPatchController => {
   }
 
   let _Lv = 0, _Mv1 = 0, _Mv2 = 0, _Hv = 0, _E = 0
-  const ATTACK_E = 0.40, RELEASE_E = 0.025
+  const ATTACK_E = 0.40, RELEASE_E = 0.045
 
   const updateBands = () => {
     _Lv  = processBand(bands.low,  'low')
@@ -43,109 +42,100 @@ export const createWav6aPatch = (api: HydraApi): HydraPatchController => {
   const Lv = () => _Lv, Mv1 = () => _Mv1, Mv2 = () => _Mv2, Hv = () => _Hv, E = () => _E
 
   // ============================================================
-  // BASE PEAU
-  // osc très basse fréquence = dégradé doux chaud→sombre
-  // + grain de noise pour la texture de surface
-  // ============================================================
-  // osc basse fréq = dégradé doux chaud d'un côté, sombre de l'autre
-  const warmGrad = osc(0.8, 0.001, 0)
-    .color(0.92, 0.62, 0.46)
-    .brightness(0.04)
-    .contrast(0.90)
-
-  // grain de peau : noise moyen très lent
-  const skinGrain = noise(5, 0.003)
-    .color(0.88, 0.56, 0.38)
-    .brightness(-0.05)
-    .contrast(1.20)
-
-  const skin = warmGrad.blend(skinGrain, 0.45)
-
-  // ============================================================
-  // OMBRES — oscillateurs N&B centrés autour de 0
-  //
-  // Technique : osc.contrast(élevé).brightness(-0.5) → valeurs ≈ -0.5..+0.5
-  // Ajout à la peau : zones neg = ombre, zones pos = reflet
-  // Amplitude = 0 au silence (rien n'est ajouté), monte avec chaque bande
-  //
-  // Le champ de noise déforme les bandes droites → ombres organiques
+  // OSCILLATEURS — couleurs saturées par bande
+  // LOW  → rouge/orange vif
+  // MID1 → jaune/lime
+  // MID2 → cyan/électrique
+  // HIGH → magenta
   // ============================================================
 
-  // LOW : grandes bandes lentes, profondes — pulsent avec les graves
-  const warpLow  = noise(() => 0.3 + Lv() * 0.8,  () => Lv() * 0.08)
+  const warpLow  = noise(() => 0.5 + Lv() * 1.5,  () => Lv() * 0.10)
   const oscLow   = osc(
-    () => 2.0 + Lv() * 6.0,
+    () => 2.0 + Lv() * 8.0,
     () => Lv() * 0.30,
     0,
-  ).modulate(warpLow, () => 0.10 + Lv() * 0.18)
-   .contrast(   () => 3.0 + Lv() * 2.5)
-   .brightness(-0.50)
+  ).modulate(warpLow, () => 0.08 + Lv() * 0.20)
+   .color(() => Lv() * 3.5, () => Lv() * 0.6, () => 0)
 
-  // MID1 : bandes moyennes, tempo modéré
-  const warpMid1 = noise(() => 1.0 + Mv1() * 2.5,  () => Mv1() * 0.18)
+  const warpMid1 = noise(() => 1.2 + Mv1() * 3.0,  () => Mv1() * 0.20)
   const oscMid1  = osc(
-    () => 7.0 + Mv1() * 14.0,
-    () => Mv1() * 0.50,
+    () => 8.0 + Mv1() * 18.0,
+    () => Mv1() * 0.55,
     1.0,
-  ).modulate(warpMid1, () => 0.08 + Mv1() * 0.14)
-   .contrast(   () => 3.5 + Mv1() * 2.0)
-   .brightness(-0.50)
+  ).modulate(warpMid1, () => 0.06 + Mv1() * 0.16)
+   .color(() => Mv1() * 2.8, () => Mv1() * 3.5, () => 0)
 
-  // MID2 : bandes fines, plus rapides
-  const warpMid2 = noise(() => 2.0 + Mv2() * 4.0,  () => Mv2() * 0.25)
+  const warpMid2 = noise(() => 2.5 + Mv2() * 5.0,  () => Mv2() * 0.30)
   const oscMid2  = osc(
-    () => 14.0 + Mv2() * 22.0,
-    () => Mv2() * 0.65,
+    () => 16.0 + Mv2() * 26.0,
+    () => Mv2() * 0.70,
     2.0,
-  ).modulate(warpMid2, () => 0.06 + Mv2() * 0.10)
-   .contrast(   () => 4.0 + Mv2() * 1.5)
-   .brightness(-0.50)
+  ).modulate(warpMid2, () => 0.05 + Mv2() * 0.12)
+   .color(() => 0, () => Mv2() * 2.8, () => Mv2() * 4.0)
 
-  // HIGH : striures très fines, tremblements rapides des aigus
-  const warpHigh = noise(() => 4.0 + Hv() * 8.0,  () => Hv() * 0.45)
+  const warpHigh = noise(() => 5.0 + Hv() * 10.0,  () => Hv() * 0.50)
   const oscHigh  = osc(
-    () => 28.0 + Hv() * 45.0,
-    () => Hv() * 0.90,
+    () => 30.0 + Hv() * 50.0,
+    () => Hv() * 0.95,
     3.0,
-  ).modulate(warpHigh, () => 0.04 + Hv() * 0.08)
-   .contrast(   () => 5.0 + Hv() * 2.5)
-   .brightness(-0.50)
+  ).modulate(warpHigh, () => 0.03 + Hv() * 0.09)
+   .color(() => Hv() * 3.5, () => 0, () => Hv() * 3.5)
 
   // ============================================================
-  // FEEDBACK FORT
-  // LOW  → zoom/dilatation
-  // MID1 → rotation lente
-  // MID2 → warp spatial
-  // fbBrightness quasi nulle en audio → traînes longues
+  // GLITCH — champs de déplacement pour le modulate
+  // glitchCoarse : déplacement brut basse-fréquence (pixels qui sautent en blocs)
+  // glitchFine   : striures fines réactives aux aigus
   // ============================================================
-  const warpFB   = noise(() => 0.5 + (Mv1() + Mv2()) * 2.0, () => (Mv1() + Mv2()) * 0.12)
 
-  const fbScale      = () => 1.000 + Lv()  * 0.022
-  const fbRotate     = () => (Mv1() - Lv()) * 0.016
-  const fbModAmt     = () => Mv2() * 0.014 + E() * 0.003
-  const fbBlend      = () => Math.min(0.94, 0.82 + E() * 0.11)
-  const fbBrightness = () => -(0.005 - E() * 0.0044)
+  const glitchCoarse = noise(
+    () => 1.5 + Lv() * 5.0,
+    () => (Lv() + Mv1()) * 0.35,
+  )
+
+  const glitchFine = noise(
+    () => 8.0 + Hv() * 20.0,
+    () => Hv() * 0.60,
+  )
+
+  // ============================================================
+  // FEEDBACK
+  // fbBlend élevé = longues traînes
+  // modulate(src(o0), ...) dans le feedback = auto-déplacement récursif = glitch
+  // ============================================================
+
+  const fbBlend      = () => { const e = E(); const floor = Math.min(0.55, e * 28); return e > 0.05 ? Math.min(0.93, 0.80 + e * 0.13) : floor }
+  const fbScale      = () => 1.000 + Lv() * 0.030
+  const fbRotate     = () => (Mv1() - Lv()) * 0.022
+  const fbBrightness = () => -(0.006 - E() * 0.005)
 
   // ============================================================
   // PIPELINE
   // ============================================================
-  skin
-    .add(oscLow,  () => Lv()  * 0.85)   // ombres graves  — 0 au silence
-    .add(oscMid1, () => Mv1() * 0.70)   // ombres mid1    — 0 au silence
-    .add(oscMid2, () => Mv2() * 0.60)   // ombres mid2    — 0 au silence
-    .add(oscHigh, () => Hv()  * 0.50)   // striures aigus — 0 au silence
-    .saturate(  () => 0.70 + E() * 0.50)
-    .contrast(  () => 1.05 + E() * 0.35)
-    .brightness(() => -0.02 + E() * 0.05)
+  oscLow
+    .add(oscMid1, () => Mv1() * 0.95)
+    .add(oscMid2, () => Mv2() * 0.95)
+    .add(oscHigh, () => Hv()  * 0.85)
+    // Glitch 1 : champ noise déforme le signal courant en blocs
+    .modulate(glitchCoarse, () => (Lv() + Mv1()) * 0.10)
+    // Glitch 2 : le feedback auto-déplace le signal = larsen visuel
+    .modulate(src(o0), () => (Mv2() + Hv()) * 0.06)
+    // Striures fines sur les aigus
+    .modulate(glitchFine, () => Hv() * 0.12)
+    .saturate(() => 1.8 + E() * 2.5)
+    .contrast(() => 1.2 + E() * 0.7)
+    .brightness(() => -0.08 + E() * 0.06)
     .blend(
       src(o0)
         .scale(fbScale)
         .rotate(fbRotate)
-        .modulate(warpFB, fbModAmt)
+        // Warp du feedback par le noise → traînes qui bougent
+        .modulate(glitchCoarse, () => (Mv1() + Mv2()) * 0.035 + Lv() * 0.055)
+        // Auto-warp récursif du feedback = glitch de feedback
+        .modulate(src(o0), () => Hv() * 0.09 + Mv2() * 0.04)
         .brightness(fbBrightness),
       fbBlend,
     )
-    .scale(10.0)
+    .scale(20.0)
     .out(o0)
 
   render(o0)
