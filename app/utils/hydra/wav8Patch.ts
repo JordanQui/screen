@@ -8,15 +8,10 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   let frameId: number | null = null
   const setBands = (b: HydraBandValues) => { bands = { ...b } }
 
-  const _prev: Record<string, number> = { low: 0, mid1: 0, mid2: 0, high: 0 }
-  function processBand(raw: number, key: string): number {
-    let v = Math.max(0, raw - 0.005) * 1.2
+  function processBand(raw: number): number {
+    let v = Math.max(0, raw - 0.005) * 2.2
     v = Math.pow(Math.max(0, v), 2.2)
-    v = Math.min(1, Math.max(0, v))
-    const p = _prev[key] || 0
-    const s = p + (v - p) * (v > p ? 0.55 : 0.75)
-    _prev[key] = s
-    return s
+    return Math.min(1, Math.max(0, v))
   }
   const gv = (x: number) => x
 
@@ -25,10 +20,10 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   let energy = 0
 
   const updateBands = () => {
-    _Lv = gv(processBand(bands.low, 'low'))
-    _Mv1 = gv(processBand(bands.mid1, 'mid1'))
-    _Mv2 = gv(processBand(bands.mid2, 'mid2'))
-    _Hv = gv(processBand(bands.high, 'high'))
+    _Lv = gv(processBand(bands.low))
+    _Mv1 = gv(processBand(bands.mid1))
+    _Mv2 = gv(processBand(bands.mid2))
+    _Hv = Math.min(1, gv(processBand(bands.high)) * 3)
     const raw = Math.max(_Lv, _Mv1, _Mv2, _Hv)
     const above = Math.max(0, raw - NOISE_FLOOR) / (1 - NOISE_FLOOR)
     const target = Math.min(1, above)
@@ -75,23 +70,27 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   // Vibration fine sur les aigus
   const hiVibrate = noise(() => 8 + Hv() * 10, () => Hv() * 0.2)
 
-  // Empiler tous les anneaux en blanc
+  // Empiler tous les anneaux en blanc pur
   rLo1.add(rLo2).add(rM1a).add(rM1b).add(rM2).add(rHi1).add(rHi2)
     .color(() => 1 + E() * 2, () => 1 + E() * 2, () => 1 + E() * 2)
     // Tremblement graves (fort) + vibration aigus (fin)
     .modulate(bassShake, () => Lv() * 0.020)
-    .modulate(hiVibrate, () => 0.005 + Hv() * 0.08)
+    .modulate(hiVibrate, () => 0.003 + Hv() * 0.03)
     .contrast(() => 1.05 + E() * 0.30)
     .brightness(() => -0.01 + E() * 0.15)
-    // Feedback fort
+    // Aberration chromatique dans le feedback : chaque bande decale un canal RGB
     .blend(
-      src(o0)
-        .scale(() => 1.002 + E() * 0.008)
-        .brightness(() => -0.005 - E() * 0.005)
+      // RED decale par LOW (pousse vers l'exterieur)
+      src(o0).scale(() => 1.003 + Lv() * 0.04).color(1, 0, 0)
+        // GREEN decale par MID1+MID2
+        .add(src(o0).scale(() => 1.0 + (Mv1() + Mv2()) * 0.015).color(0, 1, 0))
+        // BLUE decale par HIGH (pousse vers l'interieur)
+        .add(src(o0).scale(() => 0.999 - Hv() * 0.015).color(0, 0, 1))
+        .brightness(() => -0.008 - E() * 0.004)
         .contrast(1.002),
       () => 0.55 + E() * 0.35,
     )
-    .scale(2)
+    .scale(4)
     .out(o0)
 
   render(o0)
