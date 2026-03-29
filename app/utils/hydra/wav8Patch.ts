@@ -2,14 +2,14 @@ declare const time: number
 import type { HydraApi, HydraBandValues, HydraPatchController } from './types'
 
 export const createWav8Patch = (api: HydraApi): HydraPatchController => {
-  const { noise, src, shape, render, o0 } = api
+  const { noise, src, shape, render, o0, o1 } = api
 
   let bands: HydraBandValues = { low: 0, mid1: 0, mid2: 0, high: 0 }
   let frameId: number | null = null
   const setBands = (b: HydraBandValues) => { bands = { ...b } }
 
   function processBand(raw: number): number {
-    let v = Math.max(0, raw - 0.005) * 2.2
+    let v = Math.max(0, raw - 0.005) * 1.2
     v = Math.pow(Math.max(0, v), 2.2)
     return Math.min(1, Math.max(0, v))
   }
@@ -42,7 +42,6 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   const w = () => Math.max(0.004, 0.005 + Math.pow(Lv(), 2) * 0.05 - Hv() * 0.006)
   const spread = () => Lv() * 0.40
 
-  // Tous les anneaux en blanc pur
   // LOW — 2 anneaux exterieurs
   const rLo1 = shape(S, () => 0.88 + w() + spread(), SM)
     .diff(shape(S, () => 0.88 - w() + spread(), SM))
@@ -70,26 +69,21 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   // Vibration fine sur les aigus
   const hiVibrate = noise(() => 8 + Hv() * 10, () => Hv() * 0.2)
 
-  // Empiler tous les anneaux en blanc pur
+  // --- Anneaux rendus dans o1 (buffer intermediaire, sans scale ni aberration) ---
   rLo1.add(rLo2).add(rM1a).add(rM1b).add(rM2).add(rHi1).add(rHi2)
     .color(() => 1 + E() * 2, () => 1 + E() * 2, () => 1 + E() * 2)
-    // Tremblement graves (fort) + vibration aigus (fin)
     .modulate(bassShake, () => Lv() * 0.020)
     .modulate(hiVibrate, () => 0.003 + Hv() * 0.03)
     .contrast(() => 1.05 + E() * 0.30)
     .brightness(() => -0.01 + E() * 0.15)
-    // Aberration chromatique dans le feedback : chaque bande decale un canal RGB
-    .blend(
-      // RED decale par LOW (pousse vers l'exterieur)
-      src(o0).scale(() => 1.003 + Lv() * 0.04).color(1, 0, 0)
-        // GREEN decale par MID1+MID2
-        .add(src(o0).scale(() => 1.0 + (Mv1() + Mv2()) * 0.015).color(0, 1, 0))
-        // BLUE decale par HIGH (pousse vers l'interieur)
-        .add(src(o0).scale(() => 0.999 - Hv() * 0.015).color(0, 0, 1))
-        .brightness(() => -0.008 - E() * 0.004)
-        .contrast(1.002),
-      () => 0.55 + E() * 0.35,
-    )
+    .out(o1)
+
+  // --- Aberration chromatique via src(o1) : 3 canaux RGB a scales differents ---
+  // Chaque src(o1) est un objet independant — pas de mutation de chaine
+  // RED pousse vers l'exterieur (scale > 1), BLUE vers l'interieur (scale < 1)
+  src(o1).color(1, 0, 0).scale(() => 1.018 + Lv() * 0.03)
+    .add(src(o1).color(0, 1, 0).scale(() => 1.0 + (Mv1() + Mv2()) * 0.01))
+    .add(src(o1).color(0, 0, 1).scale(() => 0.982 - Hv() * 0.03))
     .scale(4)
     .out(o0)
 
