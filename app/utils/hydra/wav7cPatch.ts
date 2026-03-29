@@ -104,7 +104,7 @@ export const createWav7cPatch = (api: HydraApi): HydraPatchController => {
     .luma(() => 0.75 - sHs() * 0.45 + sLv() * 0.05)
     .blend(o0)
     .scale(() => 5 + sLv() * 1.5)
-    .scale(0.14)
+    .scale(0.4)
     .out(o0)
 
   render(o0)
