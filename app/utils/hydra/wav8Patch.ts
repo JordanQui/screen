@@ -73,40 +73,23 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   // Tremblement fort sur les graves
   const bassShake = noise(() => 3 + Lv() * 8, () => Lv() * 1.5)
   // Vibration fine sur les aigus
-  const hiVibrate = noise(() => 8 + Hv() * 20, () => Hv() * 1.2)
+  const hiVibrate = noise(() => 8 + Hv() * 10, () => Hv() * 0.2)
 
-  // Coloriser chaque groupe : blanc au silence, couleur avec le son
-  // LOW — rouge/orange chaud
-  rLo1.add(rLo2)
-    .color(() => 1 + Lv() * 4, () => 1 - Lv() * 0.8, () => 1 - Lv() * 0.9)
-  // MID1 — magenta/rose
-  rM1a.add(rM1b)
-    .color(() => 1 + Mv1() * 2, () => 1 - Mv1() * 0.7, () => 1 + Mv1() * 1.5)
-  // MID2 — bleu/violet
-  rM2
-    .color(() => 1 + Mv2() * 0.8, () => 1 - Mv2() * 0.6, () => 1 + Mv2() * 3)
-  // HIGH — blanc brillant (glow)
-  rHi1.add(rHi2)
-    .color(() => 1 + Hv() * 3, () => 1 + Hv() * 3, () => 1 + Hv() * 4)
-
-  // Empiler tous les groupes colorises
-  rLo1
-    .add(rM1a)
-    .add(rM2)
-    .add(rHi1)
+  // Empiler tous les anneaux en blanc
+  rLo1.add(rLo2).add(rM1a).add(rM1b).add(rM2).add(rHi1).add(rHi2)
+    .color(() => 1 + E() * 2, () => 1 + E() * 2, () => 1 + E() * 2)
     // Tremblement graves (fort) + vibration aigus (fin)
     .modulate(bassShake, () => Lv() * 0.020)
     .modulate(hiVibrate, () => 0.005 + Hv() * 0.08)
     .contrast(() => 1.05 + E() * 0.30)
     .brightness(() => -0.01 + E() * 0.15)
-    // Feedback avec aberration chromatique : R et B decales au son
+    // Feedback fort
     .blend(
-      src(o0).scale(() => 1.001 + E() * 0.003).color(1, 0, 0)
-        .add(src(o0).color(0, 1, 0))
-        .add(src(o0).scale(() => 0.999 - E() * 0.003).color(0, 0, 1))
-        .brightness(-0.012)
-        .contrast(1.001),
-      () => 0.20 + E() * 0.40,
+      src(o0)
+        .scale(() => 1.002 + E() * 0.008)
+        .brightness(() => -0.005 - E() * 0.005)
+        .contrast(1.002),
+      () => 0.55 + E() * 0.35,
     )
     .scale(2)
     .out(o0)
