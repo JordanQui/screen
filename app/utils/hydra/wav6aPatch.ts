@@ -5,143 +5,101 @@ export const createWav6aPatch = (api: HydraApi): HydraPatchController => {
   const { osc, noise, src, render, o0 } = api
 
   let bands: HydraBandValues = { low: 0, mid1: 0, mid2: 0, high: 0 }
-  let frameId: number | null = null
   const setBands = (b: HydraBandValues) => { bands = { ...b } }
 
-  const NOISE_FLOOR = 0.003
-  const ATTACK = 0.50, RELEASE = 0.96
-  const SILENCE_GATE = 0.010, SILENCE_FRAMES = 3
-  const _prev: Record<string, number> = { low: 0, mid1: 0, mid2: 0, high: 0 }
-  const _sil:  Record<string, number> = { low: 0, mid1: 0, mid2: 0, high: 0 }
+  const L   = () => bands.low
+  const M1  = () => bands.mid1
+  const M2  = () => bands.mid2
+  const Hh  = () => bands.high
+  const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
-  function processBand(raw: number, key: string): number {
-    let v = Math.max(0, raw - NOISE_FLOOR) * 1.4
-    v = Math.pow(Math.max(0, v), 0.75)
-    v = Math.min(1, Math.max(0, v))
-    if (v < SILENCE_GATE) { _sil[key] = (_sil[key] ?? 0) + 1; if ((_sil[key] ?? 0) >= SILENCE_FRAMES) v = 0 }
-    else { _sil[key] = 0 }
-    const p = _prev[key] ?? 0
-    _prev[key] = p + (v - p) * (v > p ? ATTACK : RELEASE)
-    return _prev[key]!
-  }
+  // Couleurs par bande — bien séparées
+  const C_LOW: [number, number, number] = [1.00, 0.42, 0.00]   // orange vif
+  const C_M1:  [number, number, number] = [0.00, 1.00, 0.55]   // vert/cyan
+  const C_M2:  [number, number, number] = [0.48, 0.36, 1.00]   // violet/indigo
+  const C_HI:  [number, number, number] = [1.00, 0.85, 0.27]   // jaune chaud
 
-  let _Lv = 0, _Mv1 = 0, _Mv2 = 0, _Hv = 0, _E = 0
-  const ATTACK_E = 0.40, RELEASE_E = 0.045
-
-  const updateBands = () => {
-    _Lv  = processBand(bands.low,  'low')
-    _Mv1 = processBand(bands.mid1, 'mid1')
-    _Mv2 = processBand(bands.mid2, 'mid2')
-    _Hv  = processBand(bands.high, 'high')
-    const raw = Math.max(_Lv, _Mv1, _Mv2, _Hv)
-    _E += (raw - _E) * (raw > _E ? ATTACK_E : RELEASE_E)
-    frameId = requestAnimationFrame(updateBands)
-  }
-  frameId = requestAnimationFrame(updateBands)
-
-  const Lv = () => _Lv, Mv1 = () => _Mv1, Mv2 = () => _Mv2, Hv = () => _Hv, E = () => _E
+  const Hsoft = () => Math.pow(clamp01(Hh()), 0.72)
 
   // ============================================================
-  // OSCILLATEURS — couleurs saturées par bande
-  // LOW  → rouge/orange vif
-  // MID1 → jaune/lime
-  // MID2 → cyan/électrique
-  // HIGH → magenta
+  // FRÉQUENCES — les aigus augmentent la fréquence de TOUS les oscis
+  // Chaque bande pilote sa propre gamme + apport des aigus
   // ============================================================
-
-  const warpLow  = noise(() => 0.5 + Lv() * 1.5,  () => Lv() * 0.10)
-  const oscLow   = osc(
-    () => 2.0 + Lv() * 8.0,
-    () => Lv() * 0.30,
-    0,
-  ).modulate(warpLow, () => 0.08 + Lv() * 0.20)
-   .color(() => Lv() * 3.5, () => Lv() * 0.6, () => 0)
-
-  const warpMid1 = noise(() => 1.2 + Mv1() * 3.0,  () => Mv1() * 0.20)
-  const oscMid1  = osc(
-    () => 8.0 + Mv1() * 18.0,
-    () => Mv1() * 0.55,
-    1.0,
-  ).modulate(warpMid1, () => 0.06 + Mv1() * 0.16)
-   .color(() => Mv1() * 2.8, () => Mv1() * 3.5, () => 0)
-
-  const warpMid2 = noise(() => 2.5 + Mv2() * 5.0,  () => Mv2() * 0.30)
-  const oscMid2  = osc(
-    () => 16.0 + Mv2() * 26.0,
-    () => Mv2() * 0.70,
-    2.0,
-  ).modulate(warpMid2, () => 0.05 + Mv2() * 0.12)
-   .color(() => 0, () => Mv2() * 2.8, () => Mv2() * 4.0)
-
-  const warpHigh = noise(() => 5.0 + Hv() * 10.0,  () => Hv() * 0.50)
-  const oscHigh  = osc(
-    () => 30.0 + Hv() * 50.0,
-    () => Hv() * 0.95,
-    3.0,
-  ).modulate(warpHigh, () => 0.03 + Hv() * 0.09)
-   .color(() => Hv() * 3.5, () => 0, () => Hv() * 3.5)
-
-  // ============================================================
-  // GLITCH — champs de déplacement pour le modulate
-  // glitchCoarse : déplacement brut basse-fréquence (pixels qui sautent en blocs)
-  // glitchFine   : striures fines réactives aux aigus
-  // ============================================================
-
-  const glitchCoarse = noise(
-    () => 1.5 + Lv() * 5.0,
-    () => (Lv() + Mv1()) * 0.35,
-  )
-
-  const glitchFine = noise(
-    () => 8.0 + Hv() * 20.0,
-    () => Hv() * 0.60,
+  const fLow  = () => 8  + L()      * 22 + Hsoft() * 6
+                        + (L()  * 3.0) * (Math.sin(time * 0.90) + Math.sin(time * 1.457)) * 0.5
+  const fM1   = () => 11 + M1()     *  8 + Hsoft() * 8
+                        + (M1() * 2.4) * (Math.sin(time * 1.00) + Math.sin(time * 1.618)) * 0.5
+  const fM2   = () => 15 + M2()     * 10 + Hsoft() * 10
+                        + (M2() * 2.8) * (Math.sin(time * 1.20) + Math.sin(time * 1.946)) * 0.5
+  const fHigh = () => Math.min(
+    18 + Hsoft() * 28 + (Hsoft() * 3.2) * (Math.sin(time * 1.9) + Math.sin(time * 2.89)) * 0.5,
+    38,
   )
 
   // ============================================================
-  // FEEDBACK
-  // fbBlend élevé = longues traînes
-  // modulate(src(o0), ...) dans le feedback = auto-déplacement récursif = glitch
+  // BASE COULEUR — zéro au silence, couleur saturée dès que la bande joue
+  // Multiplicateur élevé (3.0) pour que les couleurs claquent
   // ============================================================
+  const bL  = () => Math.min(1, L()      * 3.0)
+  const bM1 = () => Math.min(1, M1()     * 3.0)
+  const bM2 = () => Math.min(1, M2()     * 3.0)
+  const bHi = () => Math.min(1, Hsoft()  * 3.5)
 
-  const fbBlend      = () => { const e = E(); const floor = Math.min(0.55, e * 28); return e > 0.05 ? Math.min(0.93, 0.80 + e * 0.13) : floor }
-  const fbScale      = () => 1.000 + Lv() * 0.030
-  const fbRotate     = () => (Mv1() - Lv()) * 0.022
-  const fbBrightness = () => -(0.006 - E() * 0.005)
+  const lowL = osc(fLow,  0, 0).color(() => bL()  * C_LOW[0], () => bL()  * C_LOW[1], () => bL()  * C_LOW[2])
+  const m1L  = osc(fM1,   0, 0).color(() => bM1() * C_M1[0],  () => bM1() * C_M1[1],  () => bM1() * C_M1[2])
+  const m2L  = osc(fM2,   0, 0).color(() => bM2() * C_M2[0],  () => bM2() * C_M2[1],  () => bM2() * C_M2[2])
+  const hiL  = osc(fHigh, 0, 0).color(() => bHi() * C_HI[0],  () => bHi() * C_HI[1],  () => bHi() * C_HI[2])
+
+  // ============================================================
+  // CHAMP DE FLOW — modulé par l'énergie globale
+  // ============================================================
+  let _warmGate = 0
+  let warmFrames = 0
+  let warmId: number | null = null
+  const warmStep = () => {
+    warmFrames++
+    if (warmFrames >= 2) _warmGate = 1
+    else warmId = requestAnimationFrame(warmStep)
+  }
+  warmId = requestAnimationFrame(warmStep)
+
+  const flow = noise(
+    () => 1.25 + (M1() + M2() + Hh()) * 2.2,
+    () => (0.05 + Hh() * 0.40) * _warmGate,
+  )
+  const flowAmt = () => (0.010 + (L() + M1() + M2()) * 0.015 + Hsoft() * 0.026) * _warmGate
 
   // ============================================================
   // PIPELINE
+  // Add amounts réactifs : chaque bande n'apparaît que quand elle joue
+  // fbAmt sans base fixe → noir au silence
   // ============================================================
-  oscLow
-    .add(oscMid1, () => Mv1() * 0.95)
-    .add(oscMid2, () => Mv2() * 0.95)
-    .add(oscHigh, () => Hv()  * 0.85)
-    // Glitch 1 : champ noise déforme le signal courant en blocs
-    .modulate(glitchCoarse, () => (Lv() + Mv1()) * 0.10)
-    // Glitch 2 : le feedback auto-déplace le signal = larsen visuel
-    .modulate(src(o0), () => (Mv2() + Hv()) * 0.06)
-    // Striures fines sur les aigus
-    .modulate(glitchFine, () => Hv() * 0.12)
-    .saturate(() => 1.8 + E() * 2.5)
-    .contrast(() => 1.2 + E() * 0.7)
-    .brightness(() => -0.08 + E() * 0.06)
+  const fbAmt = () => Math.min(0.20, (L() + M1() + M2() + Hsoft()) * 0.12) * _warmGate
+
+  lowL
+    .add(m1L,  () => Math.min(1, M1() * 4.0))
+    .add(m2L,  () => Math.min(1, M2() * 4.0))
+    .add(hiL,  () => Math.min(1, Hsoft() * 4.0))
+    .saturate(1.5)
+    .contrast(1.4)
+    .modulate(flow, flowAmt)
+    .scrollX(() => (M2() - L())  * 0.0022)
+    .scrollY(() => (M1() - Hh()) * 0.0022)
     .blend(
       src(o0)
-        .scale(fbScale)
-        .rotate(fbRotate)
-        // Warp du feedback par le noise → traînes qui bougent
-        .modulate(glitchCoarse, () => (Mv1() + Mv2()) * 0.035 + Lv() * 0.055)
-        // Auto-warp récursif du feedback = glitch de feedback
-        .modulate(src(o0), () => Hv() * 0.09 + Mv2() * 0.04)
-        .brightness(fbBrightness),
-      fbBlend,
+        .colorama(() => 0.004 + Hh() * 0.018)
+        .contrast(1.0005),
+      fbAmt,
     )
-    .scale(20.0)
+    .luma(0.12, 0.08)
+    .brightness(-0.08)
+    .scale(2)
     .out(o0)
 
   render(o0)
 
   return {
     setBands,
-    stop: () => { if (frameId !== null) cancelAnimationFrame(frameId) },
+    stop: () => { if (warmId !== null) cancelAnimationFrame(warmId) },
   }
 }
