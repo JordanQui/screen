@@ -61,9 +61,13 @@ function resolveApi(hydra: any): HydraApi | null {
 }
 
 function syncCanvasSize(canvas: HTMLCanvasElement) {
-  const dpr = Math.min(3.0, window.devicePixelRatio || 1)
-  const w = Math.max(1, Math.floor(canvas.clientWidth * dpr))
-  const h = Math.max(1, Math.floor(canvas.clientHeight * dpr))
+  // Force 2× render resolution (SSAA) to match macOS Retina quality.
+  // On 1080p@DPR=1, renders at 3840×2160 then browser downscales to 1920×1080.
+  const dpr = Math.max(2.0, window.devicePixelRatio || 1)
+  const cssW = canvas.clientWidth || window.innerWidth
+  const cssH = canvas.clientHeight || window.innerHeight
+  const w = Math.max(1, Math.floor(cssW * dpr))
+  const h = Math.max(1, Math.floor(cssH * dpr))
   canvas.width = w
   canvas.height = h
   return { w, h }
@@ -97,6 +101,7 @@ async function initSlot(slot: number) {
     width: w,
     height: h,
     pixelRatio: 1,
+    precision: 'highp',
   })
 
   // Sync time to window for patch closures that reference `time`
@@ -182,6 +187,7 @@ function cleanup() {
 }
 
 onMounted(async () => {
+  await nextTick()
   await initSlot(activeSlot.value)
 
   const resize = () => {
