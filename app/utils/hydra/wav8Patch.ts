@@ -8,7 +8,7 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   const setBands = (b: HydraBandValues) => { bands = { ...b } }
 
   function processBand(raw: number): number {
-    let v = Math.max(0, raw - 0.005) * 1.5
+    let v = Math.max(0, raw - 0.005) * 3.5
     v = Math.pow(Math.max(0, v), 2.2)
     return Math.min(1, Math.max(0, v))
   }
