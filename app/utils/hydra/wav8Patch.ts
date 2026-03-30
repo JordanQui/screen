@@ -68,18 +68,18 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   const rawLv  = () => Math.min(1, Math.max(0, bands.low  - 0.003) * 2.5)
   const rawMv1 = () => Math.min(1, Math.max(0, bands.mid1 - 0.003) * 2.5)
   const rawMv2 = () => Math.min(1, Math.max(0, bands.mid2 - 0.003) * 2.5)
-  const rawHv  = () => Math.min(1, Math.max(0, bands.high - 0.003) * 2.5)
+  const rawHv  = () => Math.min(1, Math.max(0, bands.high - 0.002) * 8.0)
 
   // Tremblement grave — noise toujours anime, vitesse et amplitude selon les basses
   const bassShake = noise(() => 2 + rawLv() * 7, () => 0.5 + rawLv() * 2.0)
   // Vibration aigue — noise toujours anime, vitesse et amplitude selon les aigus
-  const hiVibrate = noise(() => 7 + rawHv() * 8, () => 1.0 + rawHv() * 1.5)
+  const hiVibrate = noise(() => 2 + rawHv() * 5, () => 1.0 + rawHv() * 4.0)
 
   // --- Anneaux rendus dans o1 (buffer intermediaire, sans scale ni aberration) ---
   rLo1.add(rLo2).add(rM1a).add(rM1b).add(rM2).add(rHi1).add(rHi2)
     .color(() => 1 + E() * 2, () => 1 + E() * 2, () => 1 + E() * 2)
     .modulate(bassShake, () => 0.004 + rawLv() * 0.018)
-    .modulate(hiVibrate, () => 0.004 + rawHv() * 0.025)
+    .modulate(hiVibrate, () => 0.004 + rawHv() * 0.022)
     .contrast(() => 1.05 + E() * 0.30)
     .brightness(() => -0.01 + E() * 0.15)
     .out(o1)

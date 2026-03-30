@@ -61,9 +61,7 @@ function resolveApi(hydra: any): HydraApi | null {
 }
 
 function syncCanvasSize(canvas: HTMLCanvasElement) {
-  // Force 2× render resolution (SSAA) to match macOS Retina quality.
-  // On 1080p@DPR=1, renders at 3840×2160 then browser downscales to 1920×1080.
-  const dpr = Math.max(2.0, window.devicePixelRatio || 1)
+  const dpr = Math.max(1.5, window.devicePixelRatio || 1)
   const cssW = canvas.clientWidth || window.innerWidth
   const cssH = canvas.clientHeight || window.innerHeight
   const w = Math.max(1, Math.floor(cssW * dpr))
