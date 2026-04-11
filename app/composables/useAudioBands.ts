@@ -1,8 +1,8 @@
 import type { HydraBandValues } from '~/utils/hydra/types'
 
 const FFT_SIZE = 512
-const SENS_GAIN = 1.0
-const IOS_MOBILE_GAIN_MULTIPLIER = 4
+const SENS_GAIN = 2.0
+const IOS_MOBILE_GAIN_MULTIPLIER = 8
 const NOISE_FLOOR = 0.1
 const GAIN = 1
 const GAMMA = 0.7
