@@ -112,7 +112,7 @@ export const createWav9Patch = (api: HydraApi): HydraPatchController => {
       () => 0,
     )
     .contrast(() => 1.2 + vMv1() * 2.0)
-    .brightness(() => -0.3 + vMv1() * 0.35)
+    .brightness(() => -0.15 + vMv1() * 0.45)
 
   // MID2 : 11–18 bandes — vagues intermédiaires → jaune/orange
   const oscMid2 = osc(() => 11.0 + Mv2() * 8.0, 0, 2.0)
@@ -123,7 +123,7 @@ export const createWav9Patch = (api: HydraApi): HydraPatchController => {
       () => 0,
     )
     .contrast(() => 1.2 + vMv2() * 2.0)
-    .brightness(() => -0.3 + vMv2() * 0.35)
+    .brightness(() => -0.15 + vMv2() * 0.45)
 
   // HIGH : 22–38 bandes — vagues fines et serrées → violet pur
   const oscHigh = osc(() => 22.0 + Hv() * 16.0, 0, 3.0)

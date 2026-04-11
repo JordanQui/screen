@@ -27,7 +27,11 @@ const config = useRuntimeConfig()
 const { bands, start, stop } = useAudioBands({ micResetMs: config.public.micResetMs as number })
 
 const reloadKey = ref(0)
-const unlocked = useState('hydraUnlocked', () => false)
+const SESSION_KEY = 'hydraUnlocked'
+const unlocked = useState('hydraUnlocked', () => {
+  if (import.meta.client) return sessionStorage.getItem(SESSION_KEY) === '1'
+  return false
+})
 const password = ref('')
 const showError = ref(false)
 const passwordInput = ref<HTMLInputElement | null>(null)
@@ -43,6 +47,7 @@ const isLocked = computed(() => isHydraRoute.value && !unlocked.value)
 function submitPassword() {
   if (password.value === '123') {
     unlocked.value = true
+    sessionStorage.setItem(SESSION_KEY, '1')
     showError.value = false
     password.value = ''
     return
@@ -71,15 +76,6 @@ watch(isLocked, (locked) => {
   nextTick(() => { passwordInput.value?.focus() })
 })
 
-watch(
-  () => route.path,
-  (path) => {
-    if (hydraPrefixes.some(prefix => path.startsWith(prefix))) {
-      unlocked.value = false
-    }
-  },
-  { immediate: true },
-)
 </script>
 
 <style scoped>
