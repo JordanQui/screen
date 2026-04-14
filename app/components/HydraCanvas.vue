@@ -247,6 +247,10 @@ watch(() => props.reloadToken, async (next, prev) => {
   await restart()
 })
 
+watch(() => props.patchFactory, async () => {
+  await restart()
+})
+
 onBeforeUnmount(() => cleanup())
 </script>
 
