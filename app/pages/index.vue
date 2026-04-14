@@ -27,6 +27,13 @@
         <li><NuxtLink to="/ronde-insta/ronde1mzoomed">ronde1mzoomed</NuxtLink></li>
       </ul>
     </section> -->
+
+    <section>
+      <h2>Rosace</h2>
+      <ul>
+        <li><NuxtLink to="/ronde-insta/roseace_ronde">roseace_ronde</NuxtLink></li>
+      </ul>
+    </section>
   </div>
 </template>
 
