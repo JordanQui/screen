@@ -9,12 +9,15 @@ export default defineNuxtConfig({
         { name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no' },
         { name: 'theme-color', content: '#000000' },
       ],
+      style: [
+        { innerHTML: 'html,body{background:#000!important}' },
+      ],
     },
   },
   css: ['~/assets/css/main.css'],
   runtimeConfig: {
     public: {
-      reloadIntervalMs: 20000,
+      reloadIntervalMs: 120000,
       micResetMs: 240000,
     },
   },

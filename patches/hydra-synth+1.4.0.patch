@@ -1,0 +1,28 @@
+diff --git a/node_modules/hydra-synth/dist/hydra-synth.js b/node_modules/hydra-synth/dist/hydra-synth.js
+index 916280d..05ce6fd 100644
+--- a/node_modules/hydra-synth/dist/hydra-synth.js
++++ b/node_modules/hydra-synth/dist/hydra-synth.js
+@@ -4353,7 +4353,8 @@ var Output = function ({
+ 
+   this.fbos = Array(2).fill().map(() => this.regl.framebuffer({
+     color: this.regl.texture({
+-      mag: 'nearest',
++      mag: 'linear',
++      min: 'linear',
+       width: width,
+       height: height,
+       format: 'rgba'
+diff --git a/node_modules/hydra-synth/src/output.js b/node_modules/hydra-synth/src/output.js
+index f0a0448..c418496 100755
+--- a/node_modules/hydra-synth/src/output.js
++++ b/node_modules/hydra-synth/src/output.js
+@@ -17,7 +17,8 @@ var Output = function ({ regl, precision, label = "", width, height}) {
+   // for each output, create two fbos for pingponging
+   this.fbos = (Array(2)).fill().map(() => this.regl.framebuffer({
+     color: this.regl.texture({
+-      mag: 'nearest',
++      mag: 'linear',
++      min: 'linear',
+       width: width,
+       height: height,
+       format: 'rgba'

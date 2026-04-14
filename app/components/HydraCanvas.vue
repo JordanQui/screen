@@ -35,12 +35,14 @@ type HydraRuntime = {
   bandLoop: number | null
   hydraLoop: number | null
   lastHydraTick: number
+  lastSuccessfulRender: number
 }
 
 const runtimes: Array<HydraRuntime | null> = [null, null]
 let resizeObserver: ResizeObserver | null = null
 let restartPromise: Promise<void> | null = null
 let destroyed = false
+let watchdogInterval: ReturnType<typeof setInterval> | null = null
 
 function getCanvas(slot: number) {
   return slot === 0 ? canvasAEl.value : canvasBEl.value
@@ -61,9 +63,11 @@ function resolveApi(hydra: any): HydraApi | null {
 }
 
 function syncCanvasSize(canvas: HTMLCanvasElement) {
-  const dpr = Math.min(3.0, window.devicePixelRatio || 1)
-  const w = Math.max(1, Math.floor(canvas.clientWidth * dpr))
-  const h = Math.max(1, Math.floor(canvas.clientHeight * dpr))
+  const dpr = Math.max(1.5, window.devicePixelRatio || 1)
+  const cssW = canvas.clientWidth || window.innerWidth
+  const cssH = canvas.clientHeight || window.innerHeight
+  const w = Math.min(1000, Math.max(1, Math.floor(cssW * dpr)))
+  const h = Math.min(1000, Math.max(1, Math.floor(cssH * dpr)))
   canvas.width = w
   canvas.height = h
   return { w, h }
@@ -97,6 +101,7 @@ async function initSlot(slot: number) {
     width: w,
     height: h,
     pixelRatio: 1,
+    precision: 'highp',
   })
 
   // Sync time to window for patch closures that reference `time`
@@ -117,6 +122,7 @@ async function initSlot(slot: number) {
     bandLoop: null,
     hydraLoop: null,
     lastHydraTick: 0,
+    lastSuccessfulRender: performance.now(),
   }
 
   const startHydraLoop = () => {
@@ -125,7 +131,10 @@ async function initSlot(slot: number) {
       if (!runtimes[slot]) return
       const dt = now - runtime.lastHydraTick
       runtime.lastHydraTick = now
-      hydraInstance.tick?.(dt)
+      try {
+        hydraInstance.tick?.(dt)
+        runtime.lastSuccessfulRender = now
+      } catch {}
       runtime.hydraLoop = requestAnimationFrame(step)
     }
     runtime.hydraLoop = requestAnimationFrame(step)
@@ -179,9 +188,11 @@ function cleanup() {
   cleanupSlot(1)
   resizeObserver?.disconnect()
   resizeObserver = null
+  if (watchdogInterval !== null) { clearInterval(watchdogInterval); watchdogInterval = null }
 }
 
 onMounted(async () => {
+  await nextTick()
   await initSlot(activeSlot.value)
 
   const resize = () => {
@@ -196,10 +207,47 @@ onMounted(async () => {
 
   resizeObserver = new ResizeObserver(resize)
   if (containerEl.value) resizeObserver.observe(containerEl.value)
+
+  // GPU crash → reload page (kiosk: état propre garanti)
+  for (const canvasRef of [canvasAEl, canvasBEl]) {
+    canvasRef.value?.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault()
+      if (!destroyed) setTimeout(() => window.location.reload(), 2000)
+    })
+  }
+
+  // Watchdog: dernier recours si webglcontextlost ne fire pas (ARM/egl)
+  // Lit un pixel — si le canvas est blanc (GPU mort) pendant 3 checks consécutifs → reload
+  let whiteCount = 0
+  watchdogInterval = setInterval(() => {
+    if (destroyed) return
+    const canvas = getCanvas(activeSlot.value)
+    if (!canvas) return
+    try {
+      const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
+      if (gl?.isContextLost()) {
+        window.location.reload()
+        return
+      }
+    } catch {}
+    // Watchdog render : si tick() échoue silencieusement depuis >8s → reload
+    const runtime = runtimes[activeSlot.value]
+    if (!runtime) return
+    if (performance.now() - runtime.lastSuccessfulRender > 8000) {
+      whiteCount++
+      if (whiteCount >= 2) window.location.reload()
+    } else {
+      whiteCount = 0
+    }
+  }, 4000)
 })
 
 watch(() => props.reloadToken, async (next, prev) => {
   if (prev === undefined || next === prev) return
+  await restart()
+})
+
+watch(() => props.patchFactory, async () => {
   await restart()
 })
 

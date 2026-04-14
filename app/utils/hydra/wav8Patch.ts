@@ -1,4 +1,3 @@
-declare const time: number
 import type { HydraApi, HydraBandValues, HydraPatchController } from './types'
 
 export const createWav8Patch = (api: HydraApi): HydraPatchController => {
@@ -9,14 +8,14 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   const setBands = (b: HydraBandValues) => { bands = { ...b } }
 
   function processBand(raw: number): number {
-    let v = Math.max(0, raw - 0.005) * 1.2
+    let v = Math.max(0, raw - 0.005) * 3.5
     v = Math.pow(Math.max(0, v), 2.2)
     return Math.min(1, Math.max(0, v))
   }
   const gv = (x: number) => x
 
   let _Lv = 0, _Mv1 = 0, _Mv2 = 0, _Hv = 0
-  const NOISE_FLOOR = 0.01, SILENCE_GATE = 0.04, ATTACK_COEF = 0.30, RELEASE_COEF = 0.70
+  const NOISE_FLOOR = 0.01, ATTACK_COEF = 0.30, RELEASE_COEF = 0.70
   let energy = 0
 
   const updateBands = () => {
@@ -39,8 +38,8 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   // --- Cercles concentriques : exterieur=LOW, centre=HIGH ---
   const S = 200, SM = 0.003
 
-  const w = () => Math.max(0.004, 0.005 + Math.pow(Lv(), 2) * 0.05 - Hv() * 0.006)
-  const spread = () => Lv() * 0.40
+  const w = () => Math.max(0.004, 0.005 + Math.pow(Lv(), 3) * 0.025 - Hv() * 0.003)
+  const spread = () => Math.pow(Lv(), 1.5) * 0.40
 
   // LOW — 2 anneaux exterieurs
   const rLo1 = shape(S, () => 0.88 + w() + spread(), SM)
@@ -64,26 +63,33 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   const rHi2 = shape(S, () => 0.14 + w() + spread() * 0.08, SM)
     .diff(shape(S, () => 0.14 - w() + spread() * 0.08, SM))
 
-  // Tremblement fort sur les graves
-  const bassShake = noise(() => 3 + Lv() * 8, () => Lv() * 1.5)
-  // Vibration fine sur les aigus
-  const hiVibrate = noise(() => 8 + Hv() * 10, () => Hv() * 0.2)
+  // Lecture lineaire des bandes pour le tremblement : pas de courbe en puissance,
+  // sensible aux sons faibles sans le pow(2.2) de processBand
+  const rawLv  = () => Math.min(1, Math.max(0, bands.low  - 0.003) * 2.5)
+  const rawMv1 = () => Math.min(1, Math.max(0, bands.mid1 - 0.003) * 2.5)
+  const rawMv2 = () => Math.min(1, Math.max(0, bands.mid2 - 0.003) * 2.5)
+  const rawHv  = () => Math.min(1, Math.max(0, bands.high - 0.002) * 8.0)
+
+  // Tremblement grave — noise toujours anime, vitesse et amplitude selon les basses
+  const bassShake = noise(() => 2 + rawLv() * 7, () => 0.5 + rawLv() * 2.0)
+  // Vibration aigue — noise toujours anime, vitesse et amplitude selon les aigus
+  const hiVibrate = noise(() => 2 + rawHv() * 5, () => 1.0 + rawHv() * 4.0)
 
   // --- Anneaux rendus dans o1 (buffer intermediaire, sans scale ni aberration) ---
   rLo1.add(rLo2).add(rM1a).add(rM1b).add(rM2).add(rHi1).add(rHi2)
     .color(() => 1 + E() * 2, () => 1 + E() * 2, () => 1 + E() * 2)
-    .modulate(bassShake, () => Lv() * 0.020)
-    .modulate(hiVibrate, () => 0.003 + Hv() * 0.03)
+    .modulate(bassShake, () => 0.004 + rawLv() * 0.018)
+    .modulate(hiVibrate, () => 0.004 + rawHv() * 0.022)
     .contrast(() => 1.05 + E() * 0.30)
     .brightness(() => -0.01 + E() * 0.15)
     .out(o1)
 
-  // --- Aberration chromatique via src(o1) : 3 canaux RGB a scales differents ---
-  // Chaque src(o1) est un objet independant — pas de mutation de chaine
-  // RED pousse vers l'exterieur (scale > 1), BLUE vers l'interieur (scale < 1)
-  src(o1).color(1, 0, 0).scale(() => 1.018 + Lv() * 0.03)
-    .add(src(o1).color(0, 1, 0).scale(() => 1.0 + (Mv1() + Mv2()) * 0.01))
-    .add(src(o1).color(0, 0, 1).scale(() => 0.982 - Hv() * 0.03))
+  // --- Aberration chromatique : decalage X par canal ---
+  // Utilise les valeurs raw (lineaires) pour repondre des les sons faibles
+  // RED decale droite selon low, GREEN decale gauche selon mid1, BLUE decale gauche selon mid2
+  src(o1).color(1, 0, 0).scrollX(() => rawLv() * 0.018)
+    .add(src(o1).color(0, 1, 0).scrollX(() => -rawMv1() * 0.010))
+    .add(src(o1).color(0, 0, 1).scrollX(() => -rawMv2() * 0.018))
     .scale(4)
     .out(o0)
 
