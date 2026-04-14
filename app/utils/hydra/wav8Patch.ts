@@ -1,102 +1,116 @@
+declare const time: number
 import type { HydraApi, HydraBandValues, HydraPatchController } from './types'
 
 export const createWav8Patch = (api: HydraApi): HydraPatchController => {
-  const { noise, src, shape, render, o0, o1 } = api
+  const { osc, noise, src, render, o0 } = api
 
   let bands: HydraBandValues = { low: 0, mid1: 0, mid2: 0, high: 0 }
-  let frameId: number | null = null
   const setBands = (b: HydraBandValues) => { bands = { ...b } }
 
-  function processBand(raw: number): number {
-    let v = Math.max(0, raw - 0.005) * 3.5
-    v = Math.pow(Math.max(0, v), 2.2)
-    return Math.min(1, Math.max(0, v))
+  const L   = () => bands.low
+  const M1  = () => bands.mid1
+  const M2  = () => bands.mid2
+  const Hh  = () => bands.high
+  const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
+
+  // --- Palette froide / électrique ---
+  const C_LOW: [number, number, number] = [0.08, 0.38, 1.00]   // bleu électrique
+  const C_M1:  [number, number, number] = [1.00, 0.08, 0.60]   // magenta intense
+  const C_M2:  [number, number, number] = [0.00, 0.92, 0.88]   // cyan vif
+  const C_HI:  [number, number, number] = [0.88, 0.72, 1.00]   // blanc violacé
+
+  const Hsoft = () => Math.pow(clamp01(Hh()), 0.72)
+
+  // --- Fréquences oscillateurs — plage serrée pour jouer avec le zoom fort ---
+  const fLow  = () => 7  + L()      * 20 + Hsoft() * 5
+                        + (L()  * 2.8) * (Math.sin(time * 0.75) + Math.sin(time * 1.31))  * 0.5
+  const fM1   = () => 10 + M1()     *  8 + Hsoft() * 7
+                        + (M1() * 2.2) * (Math.sin(time * 0.90) + Math.sin(time * 1.49))  * 0.5
+  const fM2   = () => 14 + M2()     * 10 + Hsoft() * 9
+                        + (M2() * 2.6) * (Math.sin(time * 1.15) + Math.sin(time * 1.78))  * 0.5
+  const fHigh = () => Math.min(
+    17 + Hsoft() * 26 + (Hsoft() * 3.5) * (Math.sin(time * 1.85) + Math.sin(time * 2.73)) * 0.5,
+    40,
+  )
+
+  // --- Activation couleurs — réactives, noires au silence ---
+  const bL  = () => Math.min(1, L()     * 4.0)
+  const bM1 = () => Math.min(1, M1()    * 4.0)
+  const bM2 = () => Math.min(1, M2()    * 4.0)
+  const bHi = () => Math.min(1, Hsoft() * 4.5)
+
+  const lowL = osc(fLow,  0, 0).color(() => bL()  * C_LOW[0], () => bL()  * C_LOW[1], () => bL()  * C_LOW[2])
+  const m1L  = osc(fM1,   0, 0).color(() => bM1() * C_M1[0],  () => bM1() * C_M1[1],  () => bM1() * C_M1[2])
+  const m2L  = osc(fM2,   0, 0).color(() => bM2() * C_M2[0],  () => bM2() * C_M2[1],  () => bM2() * C_M2[2])
+  const hiL  = osc(fHigh, 0, 0).color(() => bHi() * C_HI[0],  () => bHi() * C_HI[1],  () => bHi() * C_HI[2])
+
+  // --- Warm gate ---
+  let _warmGate = 0
+  let warmFrames = 0
+  let warmId: number | null = null
+  const warmStep = () => {
+    warmFrames++
+    if (warmFrames >= 2) _warmGate = 1
+    else warmId = requestAnimationFrame(warmStep)
   }
-  const gv = (x: number) => x
+  warmId = requestAnimationFrame(warmStep)
 
-  let _Lv = 0, _Mv1 = 0, _Mv2 = 0, _Hv = 0
-  const NOISE_FLOOR = 0.01, ATTACK_COEF = 0.30, RELEASE_COEF = 0.70
-  let energy = 0
+  // --- Double champ de flow : lent (graves) + rapide (aigus) ---
+  // Plus dense que wav6a pour s'articuler avec le zoom fort
+  const flowLow = noise(
+    () => 1.0 + (L() + M1()) * 3.5,
+    () => (0.02 + L() * 0.40) * _warmGate,
+  )
+  const flowHigh = noise(
+    () => 2.8 + (M2() + Hh()) * 5.0,
+    () => (0.07 + Hh() * 0.60) * _warmGate,
+  )
 
-  const updateBands = () => {
-    _Lv = gv(processBand(bands.low))
-    _Mv1 = gv(processBand(bands.mid1))
-    _Mv2 = gv(processBand(bands.mid2))
-    _Hv = Math.min(1, gv(processBand(bands.high)) * 3)
-    const raw = Math.max(_Lv, _Mv1, _Mv2, _Hv)
-    const above = Math.max(0, raw - NOISE_FLOOR) / (1 - NOISE_FLOOR)
-    const target = Math.min(1, above)
-    const coef = target > energy ? ATTACK_COEF : RELEASE_COEF
-    energy += (target - energy) * coef
-    frameId = requestAnimationFrame(updateBands)
-  }
-  frameId = requestAnimationFrame(updateBands)
+  const flowAmtLow  = () => (0.014 + L() * 0.025 + M1() * 0.014) * _warmGate
+  const flowAmtHigh = () => (0.008 + Hsoft() * 0.036 + M2() * 0.020) * _warmGate
 
-  const Lv = () => _Lv, Mv1 = () => _Mv1, Mv2 = () => _Mv2, Hv = () => _Hv
-  const E = () => energy
+  // --- Feedback fort ---
+  const fbAmt = () => Math.min(0.42, (L() + M1() + M2() + Hsoft()) * 0.18 + 0.06) * _warmGate
 
-  // --- Cercles concentriques : exterieur=LOW, centre=HIGH ---
-  const S = 200, SM = 0.003
+  // --- Rotation réactive (différencie de wav6a qui n'utilise que scrollX/Y) ---
+  // Les mids poussent la rotation, les graves la freinent
+  const rotAmt = () => (M1() - L() * 0.5) * 0.006 + Math.sin(time * 0.11) * 0.003
 
-  const w = () => Math.max(0.004, 0.005 + Math.pow(Lv(), 3) * 0.025 - Hv() * 0.003)
-  const spread = () => Math.pow(Lv(), 1.5) * 0.40
+  // --- Scroll différentiel légèrement plus ample ---
+  const scrollXAmt = () => (M2() - L()) * 0.003 + Math.sin(time * 0.08) * 0.001
+  const scrollYAmt = () => (M1() - Hh()) * 0.003
 
-  // LOW — 2 anneaux exterieurs
-  const rLo1 = shape(S, () => 0.88 + w() + spread(), SM)
-    .diff(shape(S, () => 0.88 - w() + spread(), SM))
-  const rLo2 = shape(S, () => 0.74 + w() + spread() * 0.85, SM)
-    .diff(shape(S, () => 0.74 - w() + spread() * 0.85, SM))
+  // --- Zoom fort réactif — 3.5 base (wav6a = 2), monte avec les basses ---
+  const zoomAmt = () => 3.5 + L() * 1.5 + M1() * 0.8 + Hsoft() * 0.5
 
-  // MID1 — 2 anneaux mediums
-  const rM1a = shape(S, () => 0.60 + w() + spread() * 0.65, SM)
-    .diff(shape(S, () => 0.60 - w() + spread() * 0.65, SM))
-  const rM1b = shape(S, () => 0.48 + w() + spread() * 0.50, SM)
-    .diff(shape(S, () => 0.48 - w() + spread() * 0.50, SM))
-
-  // MID2 — 1 anneau
-  const rM2 = shape(S, () => 0.36 + w() + spread() * 0.35, SM)
-    .diff(shape(S, () => 0.36 - w() + spread() * 0.35, SM))
-
-  // HIGH — 2 anneaux centraux
-  const rHi1 = shape(S, () => 0.24 + w() + spread() * 0.18, SM)
-    .diff(shape(S, () => 0.24 - w() + spread() * 0.18, SM))
-  const rHi2 = shape(S, () => 0.14 + w() + spread() * 0.08, SM)
-    .diff(shape(S, () => 0.14 - w() + spread() * 0.08, SM))
-
-  // Lecture lineaire des bandes pour le tremblement : pas de courbe en puissance,
-  // sensible aux sons faibles sans le pow(2.2) de processBand
-  const rawLv  = () => Math.min(1, Math.max(0, bands.low  - 0.003) * 2.5)
-  const rawMv1 = () => Math.min(1, Math.max(0, bands.mid1 - 0.003) * 2.5)
-  const rawMv2 = () => Math.min(1, Math.max(0, bands.mid2 - 0.003) * 2.5)
-  const rawHv  = () => Math.min(1, Math.max(0, bands.high - 0.002) * 8.0)
-
-  // Tremblement grave — noise toujours anime, vitesse et amplitude selon les basses
-  const bassShake = noise(() => 2 + rawLv() * 7, () => 0.5 + rawLv() * 2.0)
-  // Vibration aigue — noise toujours anime, vitesse et amplitude selon les aigus
-  const hiVibrate = noise(() => 2 + rawHv() * 5, () => 1.0 + rawHv() * 4.0)
-
-  // --- Anneaux rendus dans o1 (buffer intermediaire, sans scale ni aberration) ---
-  rLo1.add(rLo2).add(rM1a).add(rM1b).add(rM2).add(rHi1).add(rHi2)
-    .color(() => 1 + E() * 2, () => 1 + E() * 2, () => 1 + E() * 2)
-    .modulate(bassShake, () => 0.004 + rawLv() * 0.018)
-    .modulate(hiVibrate, () => 0.004 + rawHv() * 0.022)
-    .contrast(() => 1.05 + E() * 0.30)
-    .brightness(() => -0.01 + E() * 0.15)
-    .out(o1)
-
-  // --- Aberration chromatique : decalage X par canal ---
-  // Utilise les valeurs raw (lineaires) pour repondre des les sons faibles
-  // RED decale droite selon low, GREEN decale gauche selon mid1, BLUE decale gauche selon mid2
-  src(o1).color(1, 0, 0).scrollX(() => rawLv() * 0.018)
-    .add(src(o1).color(0, 1, 0).scrollX(() => -rawMv1() * 0.010))
-    .add(src(o1).color(0, 0, 1).scrollX(() => -rawMv2() * 0.018))
-    .scale(4)
+  lowL
+    .add(m1L,  () => Math.min(1, M1() * 5.0))
+    .add(m2L,  () => Math.min(1, M2() * 5.0))
+    .add(hiL,  () => Math.min(1, Hsoft() * 5.0))
+    .saturate(2.0)
+    .contrast(1.6)
+    .modulate(flowLow,  flowAmtLow)
+    .modulate(flowHigh, flowAmtHigh)
+    .rotate(rotAmt)
+    .scrollX(scrollXAmt)
+    .scrollY(scrollYAmt)
+    .blend(
+      src(o0)
+        .colorama(() => 0.008 + Hh() * 0.030 + L() * 0.020)
+        .scale(() => 1.004 + Hsoft() * 0.010)  // zoom dans la boucle feedback → effet spirale
+        .rotate(() => -rotAmt() * 0.6)          // contre-rotation douce dans le feedback
+        .contrast(1.002),
+      fbAmt,
+    )
+    .luma(0.10, 0.08)
+    .brightness(-0.05)
+    .scale(zoomAmt)
     .out(o0)
 
   render(o0)
 
   return {
     setBands,
-    stop: () => { if (frameId !== null) cancelAnimationFrame(frameId) },
+    stop: () => { if (warmId !== null) cancelAnimationFrame(warmId) },
   }
 }
