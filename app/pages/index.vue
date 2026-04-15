@@ -1,6 +1,6 @@
 <template>
   <div class="patch-index">
-    <h1>Patches</h1>
+    <h1>Patches</h1 >
 
     <section>
       <h2>Waves</h2>
