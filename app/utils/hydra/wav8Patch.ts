@@ -1,10 +1,11 @@
 declare const time: number
-import type { HydraApi, HydraBandValues, HydraPatchController } from './types'
+import type { HydraApi, HydraBandValues, HydraPatchController, TimeColorTint } from './types'
 
 export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   const { osc, noise, src, render, o0 } = api
 
   let bands: HydraBandValues = { low: 0, mid1: 0, mid2: 0, high: 0 }
+  let _tc: TimeColorTint = [1, 1, 1]
   const setBands = (b: HydraBandValues) => { bands = { ...b } }
 
   const L   = () => bands.low
@@ -105,12 +106,14 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
     .luma(0.10, 0.08)
     .brightness(-0.05)
     .scale(zoomAmt)
+    .color(() => _tc[0], () => _tc[1], () => _tc[2])
     .out(o0)
 
   render(o0)
 
   return {
     setBands,
+    setColors: (t: TimeColorTint) => { _tc = t },
     stop: () => { if (warmId !== null) cancelAnimationFrame(warmId) },
   }
 }
