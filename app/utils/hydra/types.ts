@@ -10,6 +10,9 @@ export type HydraBandValues = {
   high: number
 }
 
+// Multiplicateurs RGB pour la teinte temporelle (1.0 = neutre)
+export type TimeColorTint = [number, number, number]
+
 export type HydraApi = {
   osc: (...args: any[]) => any
   noise: (...args: any[]) => any
@@ -23,6 +26,7 @@ export type HydraApi = {
 
 export type HydraPatchController = {
   setBands: (bands: HydraBandValues) => void
+  setColors?: (tint: TimeColorTint) => void
   stop: () => void
 }
 

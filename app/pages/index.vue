@@ -1,88 +1,79 @@
 <template>
-  <div class="patch-index">
-    <h1>Patches</h1>
-
-    <section>
-      <h2>Waves</h2>
-      <ul>
-        <!-- <li><NuxtLink to="/waves/wav1">wav1</NuxtLink></li> -->
-        <!-- <li><NuxtLink to="/waves/wav2">wav2</NuxtLink></li> -->
-        <!-- <li><NuxtLink to="/waves/wav3a">wav3a</NuxtLink></li> -->
-        <!-- <li><NuxtLink to="/waves/wav4a">wav4a</NuxtLink></li> -->
-        <!-- <li><NuxtLink to="/waves/wav5e">wav5e</NuxtLink></li> -->
-        <li><NuxtLink to="/waves/wav6a">wav6a</NuxtLink></li>
-        <li><NuxtLink to="/waves/wav7c">wav7c</NuxtLink></li>
-        <li><NuxtLink to="/waves/wav8">wav8</NuxtLink></li>
-        <li><NuxtLink to="/waves/wav9">wav9</NuxtLink></li>
-      </ul>
-    </section>
-
-    <!-- <section>
-      <h2>Ronde Insta</h2>
-      <ul>
-        <li><NuxtLink to="/ronde-insta/ronde1g">ronde1g</NuxtLink></li>
-        <li><NuxtLink to="/ronde-insta/ronde1i">ronde1i</NuxtLink></li>
-        <li><NuxtLink to="/ronde-insta/ronde1j">ronde1j</NuxtLink></li>
-        <li><NuxtLink to="/ronde-insta/ronde1ll">ronde1ll</NuxtLink></li>
-        <li><NuxtLink to="/ronde-insta/ronde1mzoomed">ronde1mzoomed</NuxtLink></li>
-      </ul>
-    </section> -->
-
-    <section>
-      <h2>Rosace</h2>
-      <ul>
-        <li><NuxtLink to="/ronde-insta/roseace_ronde">roseace_ronde</NuxtLink></li>
-      </ul>
-    </section>
+  <div class="grid">
+    <NuxtLink
+      v-for="patch in patches"
+      :key="patch.path"
+      :to="patch.path"
+      class="cell"
+    >
+      <iframe
+        :src="patch.path"
+        scrolling="no"
+        frameborder="0"
+        tabindex="-1"
+      />
+      <span class="label">{{ patch.name }}</span>
+    </NuxtLink>
   </div>
 </template>
 
+<script setup lang="ts">
+const patches = [
+  { path: '/waves/wav6a', name: 'wav6a' },
+  { path: '/waves/wav7c', name: 'wav7c' },
+  { path: '/waves/wav8', name: 'wav8' },
+  { path: '/waves/wav9', name: 'wav9' },
+  { path: '/ronde-insta/roseace_ronde', name: 'roseace_ronde' },
+]
+</script>
+
+<style>
+html, body { margin: 0; padding: 0; background: #000; }
+</style>
+
 <style scoped>
-.patch-index {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 2rem;
-  font-family: monospace;
-  color: #e0e0e0;
-  background: #111;
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  background: #000;
   min-height: 100vh;
 }
 
-h1 {
-  font-size: 1.4rem;
-  margin-bottom: 1.5rem;
-  border-bottom: 1px solid #333;
-  padding-bottom: 0.5rem;
+.cell {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  display: block;
+  cursor: pointer;
 }
 
-h2 {
-  font-size: 1rem;
-  color: #888;
-  margin: 1.2rem 0 0.5rem;
+.cell iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  pointer-events: none;
 }
 
-ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-li a {
-  display: inline-block;
-  padding: 0.4rem 0.8rem;
-  background: #222;
-  border: 1px solid #333;
-  border-radius: 4px;
-  color: #ccc;
-  text-decoration: none;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-li a:hover {
-  background: #2a2a2a;
-  border-color: #555;
+.label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.6);
   color: #fff;
+  font-family: monospace;
+  font-size: 0.65rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.cell:hover .label {
+  opacity: 1;
 }
 </style>

@@ -1,11 +1,12 @@
 declare const time: number
-import type { HydraApi, HydraBandValues, HydraPatchController } from './types'
+import type { HydraApi, HydraBandValues, HydraPatchController, TimeColorTint } from './types'
 
 export const createWav7cPatch = (api: HydraApi): HydraPatchController => {
   const { osc, noise, src, render, o0 } = api
 
   let bands: HydraBandValues = { low: 0, mid1: 0, mid2: 0, high: 0 }
   let frameId: number | null = null
+  let _tc: TimeColorTint = [1, 1, 1]
   const setBands = (b: HydraBandValues) => { bands = { ...b } }
 
   function processBand(raw: number): number {
@@ -105,12 +106,14 @@ export const createWav7cPatch = (api: HydraApi): HydraPatchController => {
     .blend(o0, () => 0.18 + E() * 0.25)
     .scale(() => 5 + sLv() * 1.5)
     .scale(0.6)
+    .color(() => _tc[0], () => _tc[1], () => _tc[2])
     .out(o0)
 
   render(o0)
 
   return {
     setBands,
+    setColors: (t: TimeColorTint) => { _tc = t },
     stop: () => { if (frameId !== null) cancelAnimationFrame(frameId) },
   }
 }

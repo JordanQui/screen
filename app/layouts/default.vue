@@ -1,6 +1,18 @@
 <template>
   <div class="shell">
     <slot />
+
+    <button
+      v-if="isHydraRoute && !isLocked"
+      class="time-color-toggle"
+      :class="{ 'tct-on': timeColorsEnabled }"
+      @click="toggleTimeColors"
+      :title="timeColorsEnabled ? 'Désactiver couleurs temporelles' : 'Activer couleurs temporelles'"
+    >
+      <span class="tct-dot" :style="dotStyle" />
+      <span class="tct-label">{{ timeLabel }}</span>
+    </button>
+
     <div v-if="isLocked" class="lock-overlay">
       <form class="lock-card" @submit.prevent="submitPassword">
         <div class="lock-title">Acces protege</div>
@@ -22,9 +34,12 @@
 </template>
 
 <script setup lang="ts">
+import { getTimeMomentLabel } from '~/utils/hydra/timeColors'
+
 const route = useRoute()
 const config = useRuntimeConfig()
 const { bands, start, stop } = useAudioBands({ micResetMs: config.public.micResetMs as number })
+const { enabled: timeColorsEnabled, currentTint, toggle: toggleTimeColors } = useTimeColors()
 
 const reloadKey = ref(0)
 const SESSION_KEY = 'hydraUnlocked'
@@ -38,6 +53,21 @@ const passwordInput = ref<HTMLInputElement | null>(null)
 
 provide('audioBands', bands)
 provide('reloadKey', reloadKey)
+provide('timeColorTint', currentTint)
+
+// Label du moment courant (mise à jour chaque minute)
+const timeLabel = ref(getTimeMomentLabel())
+let labelInterval: ReturnType<typeof setInterval> | null = null
+
+// Couleur du dot basée sur la teinte courante
+const dotStyle = computed(() => {
+  if (!timeColorsEnabled.value) return {}
+  const [r, g, b] = currentTint.value
+  const max = Math.max(r, g, b, 0.001)
+  return {
+    background: `rgb(${Math.round((r / max) * 210)}, ${Math.round((g / max) * 210)}, ${Math.round((b / max) * 210)})`,
+  }
+})
 
 let reloadTimer: ReturnType<typeof setInterval> | null = null
 const hydraPrefixes = ['/waves', '/circles', '/ronde-insta']
@@ -62,11 +92,13 @@ onMounted(() => {
   if (ms > 0) {
     reloadTimer = setInterval(() => { reloadKey.value++ }, ms)
   }
+  labelInterval = setInterval(() => { timeLabel.value = getTimeMomentLabel() }, 60_000)
 })
 
 onBeforeUnmount(() => {
   stop()
   if (reloadTimer) clearInterval(reloadTimer)
+  if (labelInterval) clearInterval(labelInterval)
 })
 
 watch(isLocked, (locked) => {
@@ -83,6 +115,56 @@ watch(isLocked, (locked) => {
   position: fixed;
   inset: 0;
   background: #000;
+}
+
+.time-color-toggle {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 7px;
+  border-radius: 20px;
+  border: 1px solid #2a2a2a;
+  background: rgba(10, 10, 10, 0.75);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  opacity: 0.25;
+  transition: opacity 0.2s ease, border-color 0.2s ease;
+  font-family: monospace;
+}
+
+.time-color-toggle:hover {
+  opacity: 1;
+  border-color: #444;
+}
+
+.time-color-toggle.tct-on {
+  opacity: 0.65;
+  border-color: #3a3a3a;
+}
+
+.time-color-toggle.tct-on:hover {
+  opacity: 1;
+}
+
+.tct-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #333;
+  flex-shrink: 0;
+  transition: background 2s ease;
+}
+
+.tct-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: #aaa;
+  text-transform: lowercase;
+  user-select: none;
 }
 
 .lock-overlay {
