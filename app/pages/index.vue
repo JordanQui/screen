@@ -24,7 +24,7 @@ const patches = [
   { path: '/waves/fmbell', name: 'fmbell' },
   { path: '/waves/wav8', name: 'wav8' },
   { path: '/waves/wav9', name: 'wav9' },
-  { path: '/ronde-insta/roseace_ronde', name: 'roseace_ronde' },
+  // { path: '/ronde-insta/roseace_ronde', name: 'roseace_ronde' },
 ]
 </script>
 
