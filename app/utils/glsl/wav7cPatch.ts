@@ -49,16 +49,16 @@ float hn(vec2 st, float sc, float off) {
 // osc(freq, ph) — sync=0
 vec4 hosc(vec2 st, float freq, float ph) {
   float f = max(freq, 0.001);
-  float b = st.x - ph/f;
-  return vec4(sin(b*f)*0.5+0.5, sin((b+1./3.)*f)*0.5+0.5, sin((b+2./3.)*f)*0.5+0.5, 1.0);
+  float base = st.x - ph/f;
+  return vec4(sin(base*f)*0.5+0.5, sin((base+1./3.)*f)*0.5+0.5, sin((base+2./3.)*f)*0.5+0.5, 1.0);
 }
 // osc avec sync (modulation temporelle)
 vec4 hoscS(vec2 st, float freq, float sync, float ph, float t) {
   float f = max(freq, 0.001);
-  float b = st.x - ph/f - t*sync;
-  return vec4(sin(b*f)*0.5+0.5, sin((b+1./3.)*f)*0.5+0.5, sin((b+2./3.)*f)*0.5+0.5, 1.0);
+  float base = st.x - ph/f - t*sync;
+  return vec4(sin(base*f)*0.5+0.5, sin((base+1./3.)*f)*0.5+0.5, sin((base+2./3.)*f)*0.5+0.5, 1.0);
 }
-vec4 hcol(vec4 c, float r, float g, float b)  { return vec4(c.r*r, c.g*g, c.b*b, c.a); }
+vec4 hcol(vec4 c, float r, float gv, float b)  { return vec4(c.r*r, c.g*gv, c.b*b, c.a); }
 vec4 hcon(vec4 c, float a)                     { return clamp((c-0.5)*a+0.5, 0.0, 1.0); }
 vec4 hbri(vec4 c, float a)                     { return vec4(clamp(c.rgb+a, 0.0, 1.0), c.a); }
 vec4 hadd(vec4 c0, vec4 c1, float a)           { return clamp(c0 + c1*a, 0.0, 1.0); }
