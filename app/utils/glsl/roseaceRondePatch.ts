@@ -17,7 +17,6 @@ uniform float u_Mv1;
 uniform float u_Mv2;
 uniform float u_Hv;
 uniform float u_energy;
-uniform vec3  u_tint;
 uniform float u_time;
 
 #define PI 6.2831853
@@ -149,7 +148,6 @@ void main() {
   float lumaMask = dot(res.rgb, vec3(0.299, 0.587, 0.114));
   res *= smoothstep(lumaThresh - 0.04, lumaThresh + 0.04, lumaMask);
 
-  res = hcol(res, u_tint.r, u_tint.g, u_tint.b);
   gl_FragColor = res;
 }
 `,

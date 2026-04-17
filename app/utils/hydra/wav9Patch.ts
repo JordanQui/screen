@@ -94,12 +94,14 @@ export const createWav9Patch = (api: HydraApi): HydraPatchController => {
   // ============================================================
 
   // LOW : 2–4 bandes — grandes ondulations → rouge
+  // Note: cross-channel minimal (0.18 / 0.07) évite le "color lock" sur UNSIGNED_BYTE (WebGL1)
+  // sans changer le rendu WebGL2 de façon visible
   const oscLow = osc(() => 2.0 + Lv() * 2.5, 0, 0)
     .modulate(waveFieldLow, () => 0.25 + Lv() * 0.55)
     .color(
       () => vLv() * 3.5,
-      () => 0,
-      () => 0,
+      () => vLv() * 0.18,
+      () => vLv() * 0.07,
     )
     .contrast(() => 1.2 + vLv() * 2.0)
     .brightness(() => -0.3 + vLv() * 0.35)
@@ -108,9 +110,9 @@ export const createWav9Patch = (api: HydraApi): HydraPatchController => {
   const oscMid1 = osc(() => 5.0 + Mv1() * 6.0, 0, 1.0)
     .modulate(waveFieldMid1, () => 0.18 + Mv1() * 0.40)
     .color(
-      () => 0,
+      () => vMv1() * 0.10,
       () => vMv1() * 3.5,
-      () => 0,
+      () => vMv1() * 0.07,
     )
     .contrast(() => 1.2 + vMv1() * 2.0)
     .brightness(() => -0.15 + vMv1() * 0.45)
@@ -152,8 +154,8 @@ export const createWav9Patch = (api: HydraApi): HydraPatchController => {
   const fbWarpFast = noise(4.5, 0.04)
 
   const fbBlend = () => isActive()
-    ? Math.min(0.95, 0.82 + E() * 0.13)
-    : 0.30
+    ? Math.min(0.90, 0.76 + E() * 0.12)
+    : 0.22
 
   combined
     .blend(

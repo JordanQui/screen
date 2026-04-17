@@ -76,15 +76,18 @@ void main() {
 
   vec2 stL = st + vec2(wfL) * (0.25 + Lv * 0.55);
   vec4 cL  = hosc(stL, 2.0 + Lv * 2.5, 0.0);
-  cL = hcol(cL, vLv * 3.5, 0.0, 0.0);
-  cL = hcon(cL, 1.2 + vLv * 2.0);
-  cL = hbri(cL, -0.3 + vLv * 0.35);
+  // Rouge/orange chaud : vert à 1.8 pour que hcon le pousse au-dessus de 0.5
+  // (en-dessous de 0.5, hcon combined le détruit — au-dessus il survit)
+  cL = hcol(cL, vLv * 3.0, vLv * 1.8, 0.0);
+  cL = hcon(cL, 1.1 + vLv * 0.8);
+  cL = hbri(cL, -0.15 + vLv * 0.20);
 
   vec2 stM1 = st + vec2(wfM1) * (0.18 + Mv1 * 0.40);
   vec4 cM1  = hosc(stM1, 5.0 + Mv1 * 6.0, 1.0);
-  cM1 = hcol(cM1, 0.0, vM1 * 3.5, 0.0);
-  cM1 = hcon(cM1, 1.2 + vM1 * 2.0);
-  cM1 = hbri(cM1, -0.3 + vM1 * 0.35);
+  // Vert/cyan : bleu à 1.8 symétrique pour équilibrer face au tint chaud
+  cM1 = hcol(cM1, 0.0, vM1 * 3.0, vM1 * 1.8);
+  cM1 = hcon(cM1, 1.1 + vM1 * 0.8);
+  cM1 = hbri(cM1, -0.15 + vM1 * 0.20);
 
   vec2 stM2 = st + vec2(wfM2) * (0.12 + Mv2 * 0.30);
   vec4 cM2  = hosc(stM2, 11.0 + Mv2 * 8.0, 2.0);
@@ -112,10 +115,12 @@ void main() {
   vec4 fb = texture2D(u_prev, fbSt);
   fb = hbri(fb, -(0.006 - E * 0.005));
 
-  float fbA = live ? min(0.95, 0.82 + E * 0.13) : 0.30;
+  float fbA = live ? min(0.88, 0.75 + E * 0.11) : 0.22;
   res = hblend(res, fb, fbA);
 
-  res = hcol(res, u_tint.r, u_tint.g, u_tint.b);
+  // Teinte à 35% pour préserver l'arc-en-ciel aux heures chaudes (soir/crépuscule)
+  vec3 t = 1.0 + (u_tint - vec3(1.0)) * 0.35;
+  res = hcol(res, t.r, t.g, t.b);
 
   gl_FragColor = res;
 }

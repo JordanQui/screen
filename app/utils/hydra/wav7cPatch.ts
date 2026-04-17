@@ -77,7 +77,7 @@ export const createWav7cPatch = (api: HydraApi): HydraPatchController => {
     .add(oscM2, 0.6)
     .add(oscHi, () => sHs() * 0.4)
     .contrast(() => 1.03 + sLv() * 0.4)
-    .brightness(-0.5)
+    .brightness(-0.35)
 
   // Noise lisse pour mouvement doux
   const coarseNoise = noise(() => 0.5 + (sLv() + sMv1()) * 2.0, () => 0.08 + sLv() * 0.20)
@@ -97,7 +97,7 @@ export const createWav7cPatch = (api: HydraApi): HydraPatchController => {
       src(o0)
         .modulate(field, () => (0.006 + sLv() * 0.02) * FB_G())
         // Colorama reactif (brut) pour couleur
-        .colorama(() => (0.08 + Hsens() * 1.4) * FB_G())
+        .colorama(() => (0.05 + Hsens() * 0.9) * FB_G())
         .contrast(() => 1.003 + Hsens() * 0.005),
       () => Math.min(0.38, (0.06 + (sLv() + sMv1()) * 0.18) * FB_G()),
     )

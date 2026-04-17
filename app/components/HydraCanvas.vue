@@ -94,6 +94,10 @@ async function initSlot(slot: number) {
 
   const Hydra = (await import('hydra-synth')).default
 
+  // Diagnostic : vérifie le contexte WebGL actif
+  const glTest = canvas.getContext('webgl2')
+  console.log(`[HydraCanvas] WebGL version: ${glTest ? 'WebGL2 ✓' : 'WebGL1 (GLES2) — rendus dégradés'}`)
+
   const { w, h } = syncCanvasSize(canvas)
 
   const hydraInstance = new Hydra({
