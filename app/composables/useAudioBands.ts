@@ -6,6 +6,7 @@ const IOS_MOBILE_GAIN_MULTIPLIER = 8
 const NOISE_FLOOR = 0.1
 const GAIN = 1
 const GAMMA = 0.7
+const HIGH_EXTRA_GAIN = 3.0   // boost aigus actif uniquement si NUXT_PUBLIC_DEVICE_PROFILE=raspberry
 const ATTACK = 1.00
 const RELEASE_BASE = 0.03
 const SILENCE_GATE = 0.015
@@ -28,6 +29,7 @@ function isIOSMobile(): boolean {
 
 export function useAudioBands(options?: { micResetMs?: number }) {
   const micResetMs = options?.micResetMs ?? 240000
+  const { public: { deviceProfile } } = useRuntimeConfig()
 
   const bands = reactive<HydraBandValues>({ low: 0, mid1: 0, mid2: 0, high: 0 })
   const micRestarts = ref(0)
@@ -144,11 +146,13 @@ export function useAudioBands(options?: { micResetMs?: number }) {
     // HIGH
     const hsH = ctx.createBiquadFilter()
     hsH.type = 'highshelf'; hsH.frequency.value = 5000; hsH.gain.value = 6
-    pre.connect(hsH)
+    const highBoost = ctx.createGain()
+    highBoost.gain.value = deviceProfile === 'raspberry' ? HIGH_EXTRA_GAIN : 1.0
+    pre.connect(hsH); hsH.connect(highBoost)
     for (const fhp of [3600, 4400, 5200]) {
       const hp = ctx.createBiquadFilter()
       hp.type = 'highpass'; hp.frequency.value = fhp; hp.Q.value = 0.707
-      hsH.connect(hp)
+      highBoost.connect(hp)
       const an = ctx.createAnalyser(); an.fftSize = FFT_SIZE
       hp.connect(an); an.connect(zeroOut); anHigh.push(an)
     }

@@ -19,6 +19,7 @@ export default defineNuxtConfig({
     public: {
       reloadIntervalMs: 120000,
       micResetMs: 240000,
+      deviceProfile: '',   // override via NUXT_PUBLIC_DEVICE_PROFILE=raspberry
     },
   },
 })
