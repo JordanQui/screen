@@ -4,7 +4,7 @@ export default defineNuxtConfig({
   ssr: false,
   app: {
     head: {
-      title: 'Hydra Screen',
+      title: 'Wav Screen',
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no' },
         { name: 'theme-color', content: '#000000' },
