@@ -95,7 +95,11 @@ export const createWav6aPatch = (api: HydraApi): HydraPatchController => {
     .luma(0.12, 0.08)
     .brightness(-0.08)
     .scale(2)
-    .color(() => _tc[0], () => _tc[1], () => _tc[2])
+    .color(
+      () => 1.0 + (_tc[0] - 1.0) * 0.50,
+      () => 1.0 + (_tc[1] - 1.0) * 0.50,
+      () => 1.0 + (_tc[2] - 1.0) * 0.50,
+    )
     .out(o0)
 
   render(o0)

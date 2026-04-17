@@ -163,7 +163,11 @@ export const createWav9Patch = (api: HydraApi): HydraPatchController => {
         .brightness(() => -(0.006 - E() * 0.005)),
       fbBlend,
     )
-    .color(() => _tc[0], () => _tc[1], () => _tc[2])
+    .color(
+      () => 1.0 + (_tc[0] - 1.0) * 0.50,
+      () => 1.0 + (_tc[1] - 1.0) * 0.50,
+      () => 1.0 + (_tc[2] - 1.0) * 0.50,
+    )
     .out(o0)
 
   render(o0)
