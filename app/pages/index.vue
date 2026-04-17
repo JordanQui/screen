@@ -7,7 +7,7 @@
       class="cell"
     >
       <iframe
-        :src="patch.path"
+        :src="patch.path + '?embed=1'"
         scrolling="no"
         frameborder="0"
         tabindex="-1"
@@ -28,7 +28,7 @@ const patches = [
 </script>
 
 <style>
-html, body { margin: 0; padding: 0; background: #000; }
+html, body { margin: 0; padding: 0; background: #000; height: auto; }
 </style>
 
 <style scoped>

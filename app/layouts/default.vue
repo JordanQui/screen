@@ -3,7 +3,7 @@
     <slot />
 
     <button
-      v-if="isHydraRoute && !isLocked"
+      v-if="isHydraRoute && !isLocked && !isEmbed"
       class="time-color-toggle"
       :class="{ 'tct-on': timeColorsEnabled }"
       @click="toggleTimeColors"
@@ -38,6 +38,12 @@ import { getTimeMomentLabel } from '~/utils/hydra/timeColors'
 
 const route = useRoute()
 const config = useRuntimeConfig()
+
+// Mode embed : iframe de preview — pas d'audio, pas de verrou
+const isEmbed = computed(() =>
+  !!route.query.embed || (import.meta.client && window.parent !== window),
+)
+
 const { bands, start, stop } = useAudioBands({ micResetMs: config.public.micResetMs as number })
 const { enabled: timeColorsEnabled, currentTint, toggle: toggleTimeColors } = useTimeColors()
 
@@ -55,11 +61,9 @@ provide('audioBands', bands)
 provide('reloadKey', reloadKey)
 provide('timeColorTint', currentTint)
 
-// Label du moment courant (mise à jour chaque minute)
 const timeLabel = ref(getTimeMomentLabel())
 let labelInterval: ReturnType<typeof setInterval> | null = null
 
-// Couleur du dot basée sur la teinte courante
 const dotStyle = computed(() => {
   if (!timeColorsEnabled.value) return {}
   const [r, g, b] = currentTint.value
@@ -72,7 +76,8 @@ const dotStyle = computed(() => {
 let reloadTimer: ReturnType<typeof setInterval> | null = null
 const hydraPrefixes = ['/waves', '/circles', '/ronde-insta']
 const isHydraRoute = computed(() => hydraPrefixes.some(prefix => route.path.startsWith(prefix)))
-const isLocked = computed(() => isHydraRoute.value && !unlocked.value)
+// Jamais de verrou dans un iframe de preview
+const isLocked = computed(() => !isEmbed.value && isHydraRoute.value && !unlocked.value)
 
 function submitPassword() {
   if (password.value === '123') {
@@ -87,16 +92,19 @@ function submitPassword() {
 }
 
 onMounted(() => {
-  start()
-  const ms = config.public.reloadIntervalMs as number
-  if (ms > 0) {
-    reloadTimer = setInterval(() => { reloadKey.value++ }, ms)
+  // En mode embed (iframe preview), on ne demande pas le micro
+  if (!isEmbed.value) {
+    start()
+    const ms = config.public.reloadIntervalMs as number
+    if (ms > 0) {
+      reloadTimer = setInterval(() => { reloadKey.value++ }, ms)
+    }
+    labelInterval = setInterval(() => { timeLabel.value = getTimeMomentLabel() }, 60_000)
   }
-  labelInterval = setInterval(() => { timeLabel.value = getTimeMomentLabel() }, 60_000)
 })
 
 onBeforeUnmount(() => {
-  stop()
+  if (!isEmbed.value) stop()
   if (reloadTimer) clearInterval(reloadTimer)
   if (labelInterval) clearInterval(labelInterval)
 })
@@ -115,6 +123,8 @@ watch(isLocked, (locked) => {
   position: fixed;
   inset: 0;
   background: #000;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .time-color-toggle {
