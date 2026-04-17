@@ -11,6 +11,7 @@
         scrolling="no"
         frameborder="0"
         tabindex="-1"
+        allow="microphone"
       />
       <span class="label">{{ patch.name }}</span>
     </NuxtLink>
@@ -69,11 +70,5 @@ html, body { margin: 0; padding: 0; background: #000; height: auto; }
   color: #fff;
   font-family: monospace;
   font-size: 0.65rem;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.cell:hover .label {
-  opacity: 1;
 }
 </style>

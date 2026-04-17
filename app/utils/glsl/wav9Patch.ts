@@ -97,13 +97,15 @@ void main() {
 
   vec2 stH = st + vec2(wfH) * (0.08 + Hv * 0.22);
   vec4 cH  = hosc(stH, 22.0 + Hv * 16.0, 3.0);
-  cH = hcol(cH, Hv * 0.5, 0.0, Hv * 5.5);
-  cH = hcon(cH, 1.4 + Hv * 2.0);
+  // Rose/violet : R à 1.5 (était 0.5) pour que le rose survive au hcon réduit
+  // Blend à 3.5× pour que les aigus même modérés soient visibles
+  cH = hcol(cH, Hv * 1.5, 0.0, Hv * 4.5);
+  cH = hcon(cH, 1.2 + Hv * 1.5);
 
   vec4 res = cL;
   res = hadd(res, cM1, min(1.0, vM1 * 2.0));
   res = hadd(res, cM2, min(1.0, vM2 * 2.0));
-  res = hadd(res, cH,  min(1.0, Hv  * 2.0));
+  res = hadd(res, cH,  min(1.0, Hv  * 3.5));
   res = hcon(res, 1.1 + E * 0.8);
   res = hbri(res, -0.2 + E * 0.25);
 

@@ -92,9 +92,8 @@ function submitPassword() {
 }
 
 onMounted(() => {
-  // En mode embed (iframe preview), on ne demande pas le micro
+  start()
   if (!isEmbed.value) {
-    start()
     const ms = config.public.reloadIntervalMs as number
     if (ms > 0) {
       reloadTimer = setInterval(() => { reloadKey.value++ }, ms)
@@ -104,7 +103,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  if (!isEmbed.value) stop()
+  stop()
   if (reloadTimer) clearInterval(reloadTimer)
   if (labelInterval) clearInterval(labelInterval)
 })
