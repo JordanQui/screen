@@ -20,25 +20,25 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
   const C_M2:  [number, number, number] = [0.00, 0.92, 0.88]   // cyan vif
   const C_HI:  [number, number, number] = [0.88, 0.72, 1.00]   // blanc violacé
 
-  const Hsoft = () => Math.pow(clamp01(Hh()), 0.72)
+  const Hsoft = () => Math.pow(clamp01(Hh()), 0.30)
 
   // --- Fréquences oscillateurs — plage serrée pour jouer avec le zoom fort ---
   const fLow  = () => 7  + L()      * 20 + Hsoft() * 5
                         + (L()  * 2.8) * (Math.sin(time * 0.75) + Math.sin(time * 1.31))  * 0.5
   const fM1   = () => 10 + M1()     *  8 + Hsoft() * 7
                         + (M1() * 2.2) * (Math.sin(time * 0.90) + Math.sin(time * 1.49))  * 0.5
-  const fM2   = () => 14 + M2()     * 10 + Hsoft() * 9
-                        + (M2() * 2.6) * (Math.sin(time * 1.15) + Math.sin(time * 1.78))  * 0.5
+  const fM2   = () => 14 + M2()     * 14 + Hsoft() * 10
+                        + (M2() * 3.5) * (Math.sin(time * 1.15) + Math.sin(time * 1.78))  * 0.5
   const fHigh = () => Math.min(
-    17 + Hsoft() * 26 + (Hsoft() * 3.5) * (Math.sin(time * 1.85) + Math.sin(time * 2.73)) * 0.5,
-    40,
+    22 + Hsoft() * 38 + (Hsoft() * 5.0) * (Math.sin(time * 1.85) + Math.sin(time * 2.73)) * 0.5,
+    60,
   )
 
   // --- Activation couleurs — réactives, noires au silence ---
   const bL  = () => Math.min(1, L()     * 4.0)
   const bM1 = () => Math.min(1, M1()    * 4.0)
-  const bM2 = () => Math.min(1, M2()    * 4.0)
-  const bHi = () => Math.min(1, Hsoft() * 4.5)
+  const bM2 = () => Math.min(1, M2()    * 6.0)
+  const bHi = () => Math.min(1, Hsoft() * 10.0)
 
   const lowL = osc(fLow,  0, 0).color(() => bL()  * C_LOW[0], () => bL()  * C_LOW[1], () => bL()  * C_LOW[2])
   const m1L  = osc(fM1,   0, 0).color(() => bM1() * C_M1[0],  () => bM1() * C_M1[1],  () => bM1() * C_M1[2])
@@ -86,8 +86,8 @@ export const createWav8Patch = (api: HydraApi): HydraPatchController => {
 
   lowL
     .add(m1L,  () => Math.min(1, M1() * 5.0))
-    .add(m2L,  () => Math.min(1, M2() * 5.0))
-    .add(hiL,  () => Math.min(1, Hsoft() * 5.0))
+    .add(m2L,  () => Math.min(1, M2() * 8.0))
+    .add(hiL,  () => Math.min(1, Hsoft() * 12.0))
     .saturate(2.0)
     .contrast(1.6)
     .modulate(flowLow,  flowAmtLow)
