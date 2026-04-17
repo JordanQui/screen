@@ -1,4 +1,7 @@
 <template>
+  <div v-if="showMicPrompt" class="mic-overlay" @click="requestMicPermission">
+    <span>Tap to enable audio</span>
+  </div>
   <div class="grid">
     <NuxtLink
       v-for="patch in patches"
@@ -26,6 +29,24 @@ const patches = [
   { path: '/waves/wav9', name: 'wav9' },
   // { path: '/ronde-insta/roseace_ronde', name: 'roseace_ronde' },
 ]
+
+const showMicPrompt = ref(false)
+
+onMounted(() => {
+  const alreadyGranted = localStorage.getItem('mic-permission-asked')
+  if (!alreadyGranted) {
+    showMicPrompt.value = true
+  }
+})
+
+async function requestMicPermission() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    stream.getTracks().forEach(t => t.stop())
+  } catch {}
+  localStorage.setItem('mic-permission-asked', '1')
+  showMicPrompt.value = false
+}
 </script>
 
 <style>
@@ -58,6 +79,20 @@ html, body { margin: 0; padding: 0; background: #000; height: auto; }
   height: 100%;
   border: none;
   pointer-events: none;
+}
+
+.mic-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  font-family: monospace;
+  font-size: 1.2rem;
+  cursor: pointer;
 }
 
 .label {
