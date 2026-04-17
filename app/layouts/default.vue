@@ -92,8 +92,8 @@ function submitPassword() {
 }
 
 onMounted(() => {
-  start()
   if (!isEmbed.value) {
+    start()
     const ms = config.public.reloadIntervalMs as number
     if (ms > 0) {
       reloadTimer = setInterval(() => { reloadKey.value++ }, ms)
@@ -103,7 +103,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  stop()
+  if (!isEmbed.value) stop()
   if (reloadTimer) clearInterval(reloadTimer)
   if (labelInterval) clearInterval(labelInterval)
 })
