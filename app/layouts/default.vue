@@ -44,7 +44,7 @@ const isEmbed = computed(() =>
   !!route.query.embed || (import.meta.client && window.parent !== window),
 )
 
-const { bands, start, stop } = useAudioBands({ micResetMs: config.public.micResetMs as number })
+const { bands, start, startReceiver, stop } = useAudioBands({ micResetMs: config.public.micResetMs as number, broadcast: true })
 const { enabled: timeColorsEnabled, currentTint, toggle: toggleTimeColors } = useTimeColors()
 
 const reloadKey = ref(0)
@@ -92,7 +92,9 @@ function submitPassword() {
 }
 
 onMounted(() => {
-  if (!isEmbed.value) {
+  if (isEmbed.value) {
+    startReceiver()
+  } else {
     start()
     const ms = config.public.reloadIntervalMs as number
     if (ms > 0) {
@@ -103,7 +105,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  if (!isEmbed.value) stop()
+  stop()
   if (reloadTimer) clearInterval(reloadTimer)
   if (labelInterval) clearInterval(labelInterval)
 })

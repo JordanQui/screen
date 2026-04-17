@@ -27,8 +27,11 @@ function isIOSMobile(): boolean {
   return isIOS && isMobile
 }
 
-export function useAudioBands(options?: { micResetMs?: number }) {
+const BROADCAST_CHANNEL = 'audio-bands'
+
+export function useAudioBands(options?: { micResetMs?: number, broadcast?: boolean }) {
   const micResetMs = options?.micResetMs ?? 240000
+  const shouldBroadcast = options?.broadcast ?? false
   const { public: { deviceProfile } } = useRuntimeConfig()
 
   const bands = reactive<HydraBandValues>({ low: 0, mid1: 0, mid2: 0, high: 0 })
@@ -54,6 +57,8 @@ export function useAudioBands(options?: { micResetMs?: number }) {
   let micResetTimerId: ReturnType<typeof setInterval> | null = null
   let micRestarting = false
   let tickId: number | null = null
+  let bcSender: BroadcastChannel | null = null
+  let bcReceiver: BroadcastChannel | null = null
 
   function levelFromBuffer(buf: Float32Array): number {
     let s = 0, peak = 0
@@ -179,6 +184,10 @@ export function useAudioBands(options?: { micResetMs?: number }) {
     bands.mid2 = prevBands.mid2
     bands.high = prevBands.high
 
+    if (bcSender) {
+      bcSender.postMessage({ low: bands.low, mid1: bands.mid1, mid2: bands.mid2, high: bands.high })
+    }
+
     tickId = requestAnimationFrame(tick)
   }
 
@@ -250,16 +259,29 @@ export function useAudioBands(options?: { micResetMs?: number }) {
   }
 
   async function start() {
+    if (shouldBroadcast) bcSender = new BroadcastChannel(BROADCAST_CHANNEL)
     tickId = requestAnimationFrame(tick)
     await startAudio()
+  }
+
+  function startReceiver() {
+    bcReceiver = new BroadcastChannel(BROADCAST_CHANNEL)
+    bcReceiver.onmessage = (e: MessageEvent) => {
+      bands.low = e.data.low
+      bands.mid1 = e.data.mid1
+      bands.mid2 = e.data.mid2
+      bands.high = e.data.high
+    }
   }
 
   function stop() {
     if (tickId !== null) cancelAnimationFrame(tickId)
     tickId = null
     if (micResetTimerId) { clearInterval(micResetTimerId); micResetTimerId = null }
+    bcSender?.close(); bcSender = null
+    bcReceiver?.close(); bcReceiver = null
     stopAudio()
   }
 
-  return { bands, micRestarts, start, stop }
+  return { bands, micRestarts, start, startReceiver, stop }
 }
