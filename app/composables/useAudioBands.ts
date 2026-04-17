@@ -4,12 +4,14 @@ const FFT_SIZE = 512
 const SENS_GAIN = 2.0
 const IOS_MOBILE_GAIN_MULTIPLIER = 8
 const NOISE_FLOOR = 0.1
+const RPI_NOISE_FLOOR = 0.22   // seuil plus élevé pour filtrer les bruits faibles sur raspberry
 const GAIN = 1
 const GAMMA = 0.7
 const HIGH_EXTRA_GAIN = 3.0   // boost aigus actif uniquement si NUXT_PUBLIC_DEVICE_PROFILE=raspberry
 const ATTACK = 1.00
 const RELEASE_BASE = 0.03
 const SILENCE_GATE = 0.015
+const RPI_SILENCE_GATE = 0.05  // gate plus élevé pour éviter les déclenchements parasites sur raspberry
 const SILENCE_FRAMES = 2
 
 function isIOSMobile(): boolean {
@@ -33,6 +35,10 @@ export function useAudioBands(options?: { micResetMs?: number, broadcast?: boole
   const micResetMs = options?.micResetMs ?? 240000
   const shouldBroadcast = options?.broadcast ?? false
   const { public: { deviceProfile } } = useRuntimeConfig()
+
+  const isRpi = deviceProfile === 'raspberry'
+  const noiseFloor = isRpi ? RPI_NOISE_FLOOR : NOISE_FLOOR
+  const silenceGate = isRpi ? RPI_SILENCE_GATE : SILENCE_GATE
 
   const bands = reactive<HydraBandValues>({ low: 0, mid1: 0, mid2: 0, high: 0 })
   const micRestarts = ref(0)
@@ -68,10 +74,10 @@ export function useAudioBands(options?: { micResetMs?: number, broadcast?: boole
       if (ax > peak) peak = ax
     }
     const rms = Math.sqrt(s / buf.length)
-    let yR = Math.max(0, rms - NOISE_FLOOR) * GAIN
+    let yR = Math.max(0, rms - noiseFloor) * GAIN
     if (yR > 1) yR = 1
     yR = Math.pow(yR, GAMMA)
-    let yP = Math.max(0, peak - NOISE_FLOOR * 0.5) * (GAIN * 1.25)
+    let yP = Math.max(0, peak - noiseFloor * 0.5) * (GAIN * 1.25)
     if (yP > 1) yP = 1
     yP = Math.pow(yP, GAMMA)
     return Math.max(yR, yP)
@@ -93,7 +99,7 @@ export function useAudioBands(options?: { micResetMs?: number, broadcast?: boole
   }
 
   function applyEnv(name: string, prev: number, next: number): number {
-    if (next < SILENCE_GATE) belowCnt[name]++
+    if (next < silenceGate) belowCnt[name]++
     else belowCnt[name] = 0
     if (belowCnt[name] >= SILENCE_FRAMES) return 0
     if (next >= prev) return prev + (next - prev) * ATTACK
