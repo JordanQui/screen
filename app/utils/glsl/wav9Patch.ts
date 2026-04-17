@@ -1,0 +1,123 @@
+import type { GlslPatch } from './types'
+
+// Direct GLSL translation of wav9Patch — matches test.html MAIN_FS
+export const wav9Patch: GlslPatch = {
+  fragSrc: `
+precision highp float;
+
+varying vec2 vUv;
+uniform sampler2D u_prev;
+
+uniform float u_Lv;
+uniform float u_Mv1;
+uniform float u_Mv2;
+uniform float u_Hv;
+uniform float u_vLv;
+uniform float u_vMv1;
+uniform float u_vMv2;
+uniform float u_energy;
+uniform vec3  u_tint;
+
+float _h(float n) { return fract(sin(n) * 43758.5453123); }
+
+float noise3d(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float n = i.x + i.y * 57.0 + 113.0 * i.z;
+  return mix(
+    mix( mix(_h(n+0.0),   _h(n+1.0),   f.x),
+         mix(_h(n+57.0),  _h(n+58.0),  f.x), f.y ),
+    mix( mix(_h(n+113.0), _h(n+114.0), f.x),
+         mix(_h(n+170.0), _h(n+171.0), f.x), f.y ),
+    f.z );
+}
+
+float hn(vec2 st, float scale, float offset) {
+  return noise3d(vec3(st * scale, offset)) * 2.0 - 1.0;
+}
+
+vec4 hosc(vec2 st, float freq, float ph) {
+  float f    = max(freq, 0.001);
+  float base = st.x - ph / f;
+  float r = sin(base * f) * 0.5 + 0.5;
+  float g = sin((base + 1.0/3.0) * f) * 0.5 + 0.5;
+  float b = sin((base + 2.0/3.0) * f) * 0.5 + 0.5;
+  return vec4(r, g, b, 1.0);
+}
+vec4 hcol(vec4 c, float r, float g, float b) {
+  return vec4(c.r*r, c.g*g, c.b*b, c.a);
+}
+vec4 hcon(vec4 c, float a) {
+  return clamp((c - 0.5) * a + 0.5, 0.0, 1.0);
+}
+vec4 hbri(vec4 c, float a) {
+  return vec4(c.rgb + a, c.a);
+}
+vec4 hadd(vec4 c0, vec4 c1, float a) {
+  return clamp(c0 + c1 * a, 0.0, 1.0);
+}
+vec4 hblend(vec4 c0, vec4 c1, float a) {
+  return c0 * (1.0 - a) + c1 * a;
+}
+
+void main() {
+  vec2  st   = vUv;
+  float Lv   = u_Lv,   Mv1 = u_Mv1,  Mv2 = u_Mv2,  Hv  = u_Hv;
+  float vLv  = u_vLv,  vM1 = u_vMv1, vM2 = u_vMv2;
+  float E    = u_energy;
+  bool  live = E > 0.05;
+  float FBG  = live ? pow((E - 0.05) / 0.95, 1.2) : 0.0;
+
+  float wfL  = hn(st, 0.18 + Lv  * 0.015, 0.0);
+  float wfM1 = hn(st, 0.15 + Mv1 * 0.025, 0.0);
+  float wfM2 = hn(st, 0.50 + Mv2 * 0.035, 0.0);
+  float wfH  = hn(st, 0.80 + Hv  * 0.080, 0.0);
+
+  vec2 stL = st + vec2(wfL) * (0.25 + Lv * 0.55);
+  vec4 cL  = hosc(stL, 2.0 + Lv * 2.5, 0.0);
+  cL = hcol(cL, vLv * 3.5, 0.0, 0.0);
+  cL = hcon(cL, 1.2 + vLv * 2.0);
+  cL = hbri(cL, -0.3 + vLv * 0.35);
+
+  vec2 stM1 = st + vec2(wfM1) * (0.18 + Mv1 * 0.40);
+  vec4 cM1  = hosc(stM1, 5.0 + Mv1 * 6.0, 1.0);
+  cM1 = hcol(cM1, 0.0, vM1 * 3.5, 0.0);
+  cM1 = hcon(cM1, 1.2 + vM1 * 2.0);
+  cM1 = hbri(cM1, -0.3 + vM1 * 0.35);
+
+  vec2 stM2 = st + vec2(wfM2) * (0.12 + Mv2 * 0.30);
+  vec4 cM2  = hosc(stM2, 11.0 + Mv2 * 8.0, 2.0);
+  cM2 = hcol(cM2, vM2 * 3.0, vM2 * 2.0, 0.0);
+  cM2 = hcon(cM2, 1.2 + vM2 * 2.0);
+  cM2 = hbri(cM2, -0.3 + vM2 * 0.35);
+
+  vec2 stH = st + vec2(wfH) * (0.08 + Hv * 0.22);
+  vec4 cH  = hosc(stH, 22.0 + Hv * 16.0, 3.0);
+  cH = hcol(cH, Hv * 0.5, 0.0, Hv * 5.5);
+  cH = hcon(cH, 1.4 + Hv * 2.0);
+
+  vec4 res = cL;
+  res = hadd(res, cM1, min(1.0, vM1 * 2.0));
+  res = hadd(res, cM2, min(1.0, vM2 * 2.0));
+  res = hadd(res, cH,  min(1.0, Hv  * 2.0));
+  res = hcon(res, 1.1 + E * 0.8);
+  res = hbri(res, -0.2 + E * 0.25);
+
+  vec2 fbSt = st
+    + vec2(hn(st, 1.2, 0.015)) * (vLv * 0.04 * FBG)
+    + vec2(hn(st, 4.5, 0.04))  * (Hv  * 0.03 * FBG);
+  fbSt = clamp(fbSt, 0.0, 1.0);
+
+  vec4 fb = texture2D(u_prev, fbSt);
+  fb = hbri(fb, -(0.006 - E * 0.005));
+
+  float fbA = live ? min(0.95, 0.82 + E * 0.13) : 0.30;
+  res = hblend(res, fb, fbA);
+
+  res = hcol(res, u_tint.r, u_tint.g, u_tint.b);
+
+  gl_FragColor = res;
+}
+`,
+}

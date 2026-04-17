@@ -22,6 +22,7 @@ export type HydraApi = {
   render: (...args: any[]) => void
   o0: any
   o1: any
+  s0: any
 }
 
 export type HydraPatchController = {

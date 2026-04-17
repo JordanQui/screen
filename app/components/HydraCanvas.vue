@@ -60,8 +60,9 @@ function resolveApi(hydra: any): HydraApi | null {
   const render = hydra.render ?? synth.render
   const o0 = (hydra as any).o0 ?? (synth as any).o0
   const o1 = (hydra as any).o1 ?? (synth as any).o1
+  const s0 = (hydra as any).s0 ?? (synth as any).s0
   if (typeof osc !== 'function' || typeof noise !== 'function' || typeof src !== 'function' || !o0) return null
-  return { osc, noise, src, solid, shape, render, o0, o1 }
+  return { osc, noise, src, solid, shape, render, o0, o1, s0 }
 }
 
 function syncCanvasSize(canvas: HTMLCanvasElement) {

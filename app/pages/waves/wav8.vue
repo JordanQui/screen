@@ -1,7 +1,7 @@
 <template>
   <div class="patch-page">
     <ClientOnly>
-      <HydraCanvas :reload-token="reloadKey" :patch-factory="createWav8Patch" :bands="bands" />
+      <GlslCanvas :reload-token="reloadKey" :patch="wav8Patch" :bands="bands" />
     </ClientOnly>
   </div>
 </template>
@@ -9,7 +9,7 @@
 <script setup lang="ts">
 import type { Ref } from 'vue'
 import type { HydraBandValues } from '~/utils/hydra/types'
-import { createWav8Patch } from '~/utils/hydra/wav8Patch'
+import { wav8Patch } from '~/utils/glsl/wav8Patch'
 
 const bands = inject<HydraBandValues>('audioBands', reactive({ low: 0, mid1: 0, mid2: 0, high: 0 }))
 const reloadKey = inject<Ref<number>>('reloadKey', ref(0))
