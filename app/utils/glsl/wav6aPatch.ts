@@ -18,6 +18,11 @@ uniform float u_rawHv;
 uniform vec3  u_tint;
 uniform float u_time;
 
+uniform vec3  u_pitch_color;
+uniform float u_mood_tension;
+uniform float u_mood_brightness;
+uniform float u_mood_complexity;
+
 float _h(float n) { return fract(sin(n) * 43758.5453123); }
 float noise3d(vec3 p) {
   vec3 i = floor(p); vec3 f = fract(p);
@@ -98,10 +103,20 @@ void main() {
   float bM2 = min(1.0, M2 * 3.0);
   float bHi = min(1.0, Hs * 3.5);
 
-  vec4 lowL = hcol(hosc(st, fLow,  0.0), bL  * 1.00, bL  * 0.42, bL  * 0.00);
-  vec4 m1L  = hcol(hosc(st, fM1,   0.0), bM1 * 0.00, bM1 * 1.00, bM1 * 0.55);
-  vec4 m2L  = hcol(hosc(st, fM2,   0.0), bM2 * 0.48, bM2 * 0.36, bM2 * 1.00);
-  vec4 hiL  = hcol(hosc(st, fHigh, 0.0), bHi * 1.00, bHi * 0.85, bHi * 0.27);
+  // Couleurs pilotées par l'analyse de pitch — hue chromatique + décalages par mood
+  vec3 pc   = max(u_pitch_color, vec3(0.06));
+  vec3 ph   = rgb2hsv(pc);
+  float hue = ph.x;
+  float sat = max(ph.y, 0.55);
+  vec3 cLow  = hsv2rgb(vec3(hue,                                             sat,              1.0));
+  vec3 cMid1 = hsv2rgb(vec3(fract(hue + 0.08 + u_mood_tension    * 0.22),   sat,              1.0));
+  vec3 cMid2 = hsv2rgb(vec3(fract(hue + 0.33 + u_mood_complexity * 0.15),   min(sat+0.05,1.0), 1.0));
+  vec3 cHigh = hsv2rgb(vec3(fract(hue + 0.50 + u_mood_brightness * 0.12),   min(sat+0.12,1.0), 1.0));
+
+  vec4 lowL = hcol(hosc(st, fLow,  0.0), bL  * cLow.r,  bL  * cLow.g,  bL  * cLow.b);
+  vec4 m1L  = hcol(hosc(st, fM1,   0.0), bM1 * cMid1.r, bM1 * cMid1.g, bM1 * cMid1.b);
+  vec4 m2L  = hcol(hosc(st, fM2,   0.0), bM2 * cMid2.r, bM2 * cMid2.g, bM2 * cMid2.b);
+  vec4 hiL  = hcol(hosc(st, fHigh, 0.0), bHi * cHigh.r, bHi * cHigh.g, bHi * cHigh.b);
 
   vec4 res = lowL;
   res = hadd(res, m1L, min(1.0, M1 * 4.0));

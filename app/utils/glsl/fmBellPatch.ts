@@ -24,6 +24,11 @@ uniform float u_energy;
 uniform vec3  u_tint;
 uniform float u_time;
 
+uniform vec3  u_pitch_color;
+uniform float u_mood_tension;
+uniform float u_mood_brightness;
+uniform float u_mood_complexity;
+
 vec4 hosc(vec2 st, float freq, float ph) {
   float f = max(freq, 0.001);
   float base = st.x - ph / f;
@@ -133,20 +138,25 @@ void main() {
                            + vec2(s3x, s3y) * beta3   * 0.009),
                   fcH,  t * 0.22);
 
-  // ─── Couleurs FM Bell ───────────────────────────────────────────────────────
+  // ─── Couleurs FM Bell pilotées par l'analyse de pitch ───────────────────────
   float bL  = min(1.0, L  * 4.0);
   float bM1 = min(1.0, M1 * 4.0);
   float bM2 = min(1.0, M2 * 4.0);
   float bHi = min(1.0, Hs * 4.5);
 
-  // Low  → amber/or (fondamental, chaleur)
-  cL  = hcol(cL,  bL  * 2.2,  bL  * 0.65, bL  * 0.05);
-  // Mid1 → orange-pêche (2ème partiel, proche)
-  cM1 = hcol(cM1, bM1 * 1.8,  bM1 * 1.2,  bM1 * 0.15);
-  // Mid2 → teal-cyan (partiel inharmonique, plus froid)
-  cM2 = hcol(cM2, bM2 * 0.1,  bM2 * 1.6,  bM2 * 2.3);
-  // High → bleu-violet scintillant (queue de résonance)
-  cHi = hcol(cHi, bHi * 0.5,  bHi * 0.65, bHi * 3.5);
+  vec3 pc   = max(u_pitch_color, vec3(0.06));
+  vec3 ph   = rgb2hsv(pc);
+  float hue = ph.x;
+  float sat = max(ph.y, 0.55);
+  vec3 cLow  = hsv2rgb(vec3(hue,                                             sat,              1.0));
+  vec3 cMid1 = hsv2rgb(vec3(fract(hue + 0.08 + u_mood_tension    * 0.22),   sat,              1.0));
+  vec3 cMid2 = hsv2rgb(vec3(fract(hue + 0.33 + u_mood_complexity * 0.15),   min(sat+0.05,1.0), 1.0));
+  vec3 cHigh = hsv2rgb(vec3(fract(hue + 0.50 + u_mood_brightness * 0.12),   min(sat+0.12,1.0), 1.0));
+
+  cL  = hcol(cL,  bL  * 2.0 * cLow.r,  bL  * 2.0 * cLow.g,  bL  * 2.0 * cLow.b);
+  cM1 = hcol(cM1, bM1 * 2.0 * cMid1.r, bM1 * 2.0 * cMid1.g, bM1 * 2.0 * cMid1.b);
+  cM2 = hcol(cM2, bM2 * 2.2 * cMid2.r, bM2 * 2.2 * cMid2.g, bM2 * 2.2 * cMid2.b);
+  cHi = hcol(cHi, bHi * 3.0 * cHigh.r, bHi * 3.0 * cHigh.g, bHi * 3.0 * cHigh.b);
 
   vec4 res = cL;
   res = hadd(res, cM1, min(1.0, M1 * 5.0));

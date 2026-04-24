@@ -5,6 +5,7 @@
 <script setup lang="ts">
 import type { HydraBandValues, TimeColorTint } from '~/utils/hydra/types'
 import type { GlslPatch } from '~/utils/glsl/types'
+import type { PitchAnalysisResult } from '~/utils/audio/types'
 
 const props = defineProps<{
   patch: GlslPatch
@@ -20,26 +21,32 @@ const colorTint = inject<Ref<TimeColorTint> | null>('timeColorTint', null)
 
 // ── Typed uniform locations ────────────────────────────────────────────────────
 type ULocs = {
-  prev:   WebGLUniformLocation | null
-  logo:   WebGLUniformLocation | null
-  Lv:     WebGLUniformLocation | null
-  Mv1:    WebGLUniformLocation | null
-  Mv2:    WebGLUniformLocation | null
-  Hv:     WebGLUniformLocation | null
-  vLv:    WebGLUniformLocation | null
-  vMv1:   WebGLUniformLocation | null
-  vMv2:   WebGLUniformLocation | null
-  energy: WebGLUniformLocation | null
-  sLv:    WebGLUniformLocation | null
-  sMv1:   WebGLUniformLocation | null
-  sMv2:   WebGLUniformLocation | null
-  sHv:    WebGLUniformLocation | null
-  rawLv:  WebGLUniformLocation | null
-  rawMv1: WebGLUniformLocation | null
-  rawMv2: WebGLUniformLocation | null
-  rawHv:  WebGLUniformLocation | null
-  tint:   WebGLUniformLocation | null
-  time:   WebGLUniformLocation | null
+  prev:          WebGLUniformLocation | null
+  logo:          WebGLUniformLocation | null
+  Lv:            WebGLUniformLocation | null
+  Mv1:           WebGLUniformLocation | null
+  Mv2:           WebGLUniformLocation | null
+  Hv:            WebGLUniformLocation | null
+  vLv:           WebGLUniformLocation | null
+  vMv1:          WebGLUniformLocation | null
+  vMv2:          WebGLUniformLocation | null
+  energy:        WebGLUniformLocation | null
+  sLv:           WebGLUniformLocation | null
+  sMv1:          WebGLUniformLocation | null
+  sMv2:          WebGLUniformLocation | null
+  sHv:           WebGLUniformLocation | null
+  rawLv:         WebGLUniformLocation | null
+  rawMv1:        WebGLUniformLocation | null
+  rawMv2:        WebGLUniformLocation | null
+  rawHv:         WebGLUniformLocation | null
+  tint:          WebGLUniformLocation | null
+  time:          WebGLUniformLocation | null
+  pitchColor:    WebGLUniformLocation | null
+  moodEnergy:    WebGLUniformLocation | null
+  moodTension:   WebGLUniformLocation | null
+  moodWarmth:    WebGLUniformLocation | null
+  moodBright:    WebGLUniformLocation | null
+  moodComplex:   WebGLUniformLocation | null
 }
 
 // ── WebGL state ────────────────────────────────────────────────────────────────
@@ -74,6 +81,12 @@ const pHigh   = (r: number) => Math.min(1, Math.pow(Math.max(0, (r - 0.01) * (is
 
 let _tc: TimeColorTint = [1, 1, 1]
 
+const pitchAnalysis = inject<PitchAnalysisResult | null>('pitchAnalysis', null)
+// Couleurs pitch et mood lissées pour éviter les sauts brutaux
+let _pitchR = 0, _pitchG = 0, _pitchB = 0
+let _moodEnergy = 0, _moodTension = 0, _moodWarmth = 0, _moodBright = 0, _moodComplex = 0
+const PITCH_LERP = 0.05
+
 function smoothStep() {
   if (destroyed) return
   const rL  = pBand(props.bands.low),   rM1 = pBand(props.bands.mid1)
@@ -99,6 +112,19 @@ function smoothStep() {
   _sHv  += (_Hv  - _sHv)  * SLOW
 
   if (colorTint?.value) _tc = colorTint.value
+
+  if (pitchAnalysis) {
+    const [pr, pg, pb] = pitchAnalysis.blendedColor
+    _pitchR += (pr - _pitchR) * PITCH_LERP
+    _pitchG += (pg - _pitchG) * PITCH_LERP
+    _pitchB += (pb - _pitchB) * PITCH_LERP
+    _moodEnergy  += (pitchAnalysis.mood.energy     - _moodEnergy)  * PITCH_LERP
+    _moodTension += (pitchAnalysis.mood.tension    - _moodTension) * PITCH_LERP
+    _moodWarmth  += (pitchAnalysis.mood.warmth     - _moodWarmth)  * PITCH_LERP
+    _moodBright  += (pitchAnalysis.mood.brightness - _moodBright)  * PITCH_LERP
+    _moodComplex += (pitchAnalysis.mood.complexity - _moodComplex) * PITCH_LERP
+  }
+
   smoothAF = requestAnimationFrame(smoothStep)
 }
 
@@ -224,8 +250,14 @@ function frame() {
   if (u.rawMv1 !== null) g.uniform1f(u.rawMv1, props.bands.mid1)
   if (u.rawMv2 !== null) g.uniform1f(u.rawMv2, props.bands.mid2)
   if (u.rawHv  !== null) g.uniform1f(u.rawHv,  props.bands.high)
-  if (u.tint   !== null) g.uniform3fv(u.tint,  _tc)
-  if (u.time   !== null) g.uniform1f(u.time,   t)
+  if (u.tint        !== null) g.uniform3fv(u.tint,  _tc)
+  if (u.time        !== null) g.uniform1f(u.time,   t)
+  if (u.pitchColor  !== null) g.uniform3f(u.pitchColor,  _pitchR, _pitchG, _pitchB)
+  if (u.moodEnergy  !== null) g.uniform1f(u.moodEnergy,  _moodEnergy)
+  if (u.moodTension !== null) g.uniform1f(u.moodTension, _moodTension)
+  if (u.moodWarmth  !== null) g.uniform1f(u.moodWarmth,  _moodWarmth)
+  if (u.moodBright  !== null) g.uniform1f(u.moodBright,  _moodBright)
+  if (u.moodComplex !== null) g.uniform1f(u.moodComplex, _moodComplex)
 
   g.bindFramebuffer(g.FRAMEBUFFER, write.fbo)
   g.viewport(0, 0, W, H)
@@ -344,7 +376,11 @@ async function init() {
     sMv2:   loc('u_sMv2'),   sHv:    loc('u_sHv'),
     rawLv:  loc('u_rawLv'),  rawMv1: loc('u_rawMv1'),
     rawMv2: loc('u_rawMv2'), rawHv:  loc('u_rawHv'),
-    tint:   loc('u_tint'),   time:   loc('u_time'),
+    tint:       loc('u_tint'),      time:       loc('u_time'),
+    pitchColor: loc('u_pitch_color'),
+    moodEnergy: loc('u_mood_energy'),  moodTension: loc('u_mood_tension'),
+    moodWarmth: loc('u_mood_warmth'),  moodBright:  loc('u_mood_brightness'),
+    moodComplex: loc('u_mood_complexity'),
   }
   blitTexLoc = g.getUniformLocation(blitProg, 'u_tex')
 
@@ -352,6 +388,8 @@ async function init() {
   _Lv = 0; _Mv1 = 0; _Mv2 = 0; _Hv = 0
   _vLv = 0; _vMv1 = 0; _vMv2 = 0; _energy = 0
   _sLv = 0; _sMv1 = 0; _sMv2 = 0; _sHv = 0
+  _pitchR = 0; _pitchG = 0; _pitchB = 0
+  _moodEnergy = 0; _moodTension = 0; _moodWarmth = 0; _moodBright = 0; _moodComplex = 0
 
   if (props.patch.logoUrl) {
     loadLogoTexture(props.patch.logoUrl)   // async, non-blocking

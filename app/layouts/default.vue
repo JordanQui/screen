@@ -46,6 +46,7 @@ const isEmbed = computed(() =>
 
 const { bands, start, startReceiver, stop } = useAudioBands({ micResetMs: config.public.micResetMs as number, broadcast: true })
 const { enabled: timeColorsEnabled, currentTint, toggle: toggleTimeColors } = useTimeColors()
+const { result: pitchAnalysis, start: startPitch, stop: stopPitch } = usePitchAnalysis()
 
 const reloadKey = ref(0)
 const SESSION_KEY = 'hydraUnlocked'
@@ -60,6 +61,7 @@ const passwordInput = ref<HTMLInputElement | null>(null)
 provide('audioBands', bands)
 provide('reloadKey', reloadKey)
 provide('timeColorTint', currentTint)
+provide('pitchAnalysis', pitchAnalysis)
 
 const timeLabel = ref(getTimeMomentLabel())
 let labelInterval: ReturnType<typeof setInterval> | null = null
@@ -96,6 +98,7 @@ onMounted(() => {
     startReceiver()
   } else {
     start()
+    startPitch()
     const ms = config.public.reloadIntervalMs as number
     if (ms > 0) {
       reloadTimer = setInterval(() => { reloadKey.value++ }, ms)
@@ -106,6 +109,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stop()
+  stopPitch()
   if (reloadTimer) clearInterval(reloadTimer)
   if (labelInterval) clearInterval(labelInterval)
 })

@@ -18,6 +18,11 @@ uniform float u_vMv2;
 uniform float u_energy;
 uniform vec3  u_tint;
 
+uniform vec3  u_pitch_color;
+uniform float u_mood_tension;
+uniform float u_mood_brightness;
+uniform float u_mood_complexity;
+
 float _h(float n) { return fract(sin(n) * 43758.5453123); }
 
 float noise3d(vec3 p) {
@@ -60,6 +65,18 @@ vec4 hadd(vec4 c0, vec4 c1, float a) {
 vec4 hblend(vec4 c0, vec4 c1, float a) {
   return c0 * (1.0 - a) + c1 * a;
 }
+vec3 rgb2hsv(vec3 c) {
+  vec4 K = vec4(0., -1./3., 2./3., -1.);
+  vec4 p = mix(vec4(c.bg,K.wz), vec4(c.gb,K.xy), step(c.b,c.g));
+  vec4 q = mix(vec4(p.xyw,c.r), vec4(c.r,p.yzx), step(p.x,c.r));
+  float d = q.x - min(q.w,q.y);
+  return vec3(abs(q.z+(q.w-q.y)/(6.*d+1e-6)), d/(q.x+1e-6), q.x);
+}
+vec3 hsv2rgb(vec3 c) {
+  vec4 K = vec4(1., 2./3., 1./3., 3.);
+  vec3 p = abs(fract(c.xxx+K.xyz)*6.0-K.www);
+  return c.z * mix(K.xxx, clamp(p-K.xxx,0.0,1.0), c.y);
+}
 
 void main() {
   vec2  st   = vUv;
@@ -74,32 +91,37 @@ void main() {
   float wfM2 = hn(st, 0.50 + Mv2 * 0.035, 0.0);
   float wfH  = hn(st, 0.80 + Hv  * 0.080, 0.0);
 
+  // Couleurs pilotées par l'analyse de pitch
+  vec3 pc   = max(u_pitch_color, vec3(0.06));
+  vec3 ph   = rgb2hsv(pc);
+  float hue = ph.x;
+  float sat = max(ph.y, 0.55);
+  vec3 cLow  = hsv2rgb(vec3(hue,                                             sat,              1.0));
+  vec3 cMid1 = hsv2rgb(vec3(fract(hue + 0.08 + u_mood_tension    * 0.22),   sat,              1.0));
+  vec3 cMid2 = hsv2rgb(vec3(fract(hue + 0.33 + u_mood_complexity * 0.15),   min(sat+0.05,1.0), 1.0));
+  vec3 cHigh = hsv2rgb(vec3(fract(hue + 0.50 + u_mood_brightness * 0.12),   min(sat+0.12,1.0), 1.0));
+
   vec2 stL = st + vec2(wfL) * (0.25 + Lv * 0.55);
   vec4 cL  = hosc(stL, 2.0 + Lv * 2.5, 0.0);
-  // Rouge/orange chaud : vert à 1.8 pour que hcon le pousse au-dessus de 0.5
-  // (en-dessous de 0.5, hcon combined le détruit — au-dessus il survit)
-  cL = hcol(cL, vLv * 3.0, vLv * 1.8, 0.0);
+  cL = hcol(cL, vLv * 3.0 * cLow.r, vLv * 3.0 * cLow.g, vLv * 3.0 * cLow.b);
   cL = hcon(cL, 1.1 + vLv * 0.8);
   cL = hbri(cL, -0.15 + vLv * 0.20);
 
   vec2 stM1 = st + vec2(wfM1) * (0.18 + Mv1 * 0.40);
   vec4 cM1  = hosc(stM1, 5.0 + Mv1 * 6.0, 1.0);
-  // Vert/cyan : bleu à 1.8 symétrique pour équilibrer face au tint chaud
-  cM1 = hcol(cM1, 0.0, vM1 * 3.0, vM1 * 1.8);
+  cM1 = hcol(cM1, vM1 * 3.0 * cMid1.r, vM1 * 3.0 * cMid1.g, vM1 * 3.0 * cMid1.b);
   cM1 = hcon(cM1, 1.1 + vM1 * 0.8);
   cM1 = hbri(cM1, -0.15 + vM1 * 0.20);
 
   vec2 stM2 = st + vec2(wfM2) * (0.12 + Mv2 * 0.30);
   vec4 cM2  = hosc(stM2, 11.0 + Mv2 * 8.0, 2.0);
-  cM2 = hcol(cM2, vM2 * 3.0, vM2 * 2.0, 0.0);
+  cM2 = hcol(cM2, vM2 * 3.0 * cMid2.r, vM2 * 3.0 * cMid2.g, vM2 * 3.0 * cMid2.b);
   cM2 = hcon(cM2, 1.2 + vM2 * 2.0);
   cM2 = hbri(cM2, -0.3 + vM2 * 0.35);
 
   vec2 stH = st + vec2(wfH) * (0.08 + Hv * 0.22);
   vec4 cH  = hosc(stH, 22.0 + Hv * 16.0, 3.0);
-  // Rose/violet : R à 1.5 (était 0.5) pour que le rose survive au hcon réduit
-  // Blend à 3.5× pour que les aigus même modérés soient visibles
-  cH = hcol(cH, Hv * 1.5, 0.0, Hv * 4.5);
+  cH = hcol(cH, Hv * 4.5 * cHigh.r, Hv * 4.5 * cHigh.g, Hv * 4.5 * cHigh.b);
   cH = hcon(cH, 1.2 + Hv * 1.5);
 
   vec4 res = cL;
