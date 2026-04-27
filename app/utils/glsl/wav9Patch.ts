@@ -103,32 +103,32 @@ void main() {
 
   vec2 stL = st + vec2(wfL) * (0.25 + Lv * 0.55);
   vec4 cL  = hosc(stL, 2.0 + Lv * 2.5, 0.0);
-  cL = hcol(cL, vLv * 3.0 * cLow.r, vLv * 3.0 * cLow.g, vLv * 3.0 * cLow.b);
+  cL = hcol(cL, vLv * 2.0 * cLow.r, vLv * 2.0 * cLow.g, vLv * 2.0 * cLow.b);
   cL = hcon(cL, 1.1 + vLv * 0.8);
   cL = hbri(cL, -0.15 + vLv * 0.20);
 
   vec2 stM1 = st + vec2(wfM1) * (0.18 + Mv1 * 0.40);
   vec4 cM1  = hosc(stM1, 5.0 + Mv1 * 6.0, 1.0);
-  cM1 = hcol(cM1, vM1 * 3.0 * cMid1.r, vM1 * 3.0 * cMid1.g, vM1 * 3.0 * cMid1.b);
+  cM1 = hcol(cM1, vM1 * 2.0 * cMid1.r, vM1 * 2.0 * cMid1.g, vM1 * 2.0 * cMid1.b);
   cM1 = hcon(cM1, 1.1 + vM1 * 0.8);
   cM1 = hbri(cM1, -0.15 + vM1 * 0.20);
 
   vec2 stM2 = st + vec2(wfM2) * (0.12 + Mv2 * 0.30);
   vec4 cM2  = hosc(stM2, 11.0 + Mv2 * 8.0, 2.0);
-  cM2 = hcol(cM2, vM2 * 3.0 * cMid2.r, vM2 * 3.0 * cMid2.g, vM2 * 3.0 * cMid2.b);
-  cM2 = hcon(cM2, 1.2 + vM2 * 2.0);
+  cM2 = hcol(cM2, vM2 * 2.0 * cMid2.r, vM2 * 2.0 * cMid2.g, vM2 * 2.0 * cMid2.b);
+  cM2 = hcon(cM2, 1.2 + vM2 * 1.2);
   cM2 = hbri(cM2, -0.3 + vM2 * 0.35);
 
   vec2 stH = st + vec2(wfH) * (0.08 + Hv * 0.22);
   vec4 cH  = hosc(stH, 22.0 + Hv * 16.0, 3.0);
-  cH = hcol(cH, Hv * 4.5 * cHigh.r, Hv * 4.5 * cHigh.g, Hv * 4.5 * cHigh.b);
-  cH = hcon(cH, 1.2 + Hv * 1.5);
+  cH = hcol(cH, Hv * 2.5 * cHigh.r, Hv * 2.5 * cHigh.g, Hv * 2.5 * cHigh.b);
+  cH = hcon(cH, 1.2 + Hv * 1.0);
 
   vec4 res = cL;
-  res = hadd(res, cM1, min(1.0, vM1 * 2.0));
-  res = hadd(res, cM2, min(1.0, vM2 * 2.0));
-  res = hadd(res, cH,  min(1.0, Hv  * 3.5));
-  res = hcon(res, 1.1 + E * 0.8);
+  res = hadd(res, cM1, min(1.0, vM1 * 1.5));
+  res = hadd(res, cM2, min(1.0, vM2 * 1.5));
+  res = hadd(res, cH,  min(1.0, Hv  * 2.0));
+  res = hcon(res, 1.0 + E * 0.5);
   res = hbri(res, -0.2 + E * 0.25);
 
   vec2 fbSt = st

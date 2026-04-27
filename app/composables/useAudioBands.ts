@@ -1,18 +1,20 @@
 import type { HydraBandValues } from '~/utils/hydra/types'
 
 const FFT_SIZE = 512
-const SENS_GAIN = 2.0
+const SENS_GAIN = 4.0
 const IOS_MOBILE_GAIN_MULTIPLIER = 8
-const NOISE_FLOOR = 0.1
-const RPI_NOISE_FLOOR = 0.22   // seuil plus élevé pour filtrer les bruits faibles sur raspberry
+const NOISE_FLOOR = 0.15
+const RPI_NOISE_FLOOR = 0.23  // seuil plus élevé pour filtrer les bruits faibles sur raspberry
 const GAIN = 1
 const GAMMA = 0.7
-const HIGH_EXTRA_GAIN = 3.0   // boost aigus actif uniquement si NUXT_PUBLIC_DEVICE_PROFILE=raspberry
-const ATTACK = 1.00
+const HIGH_EXTRA_GAIN = 3.0   // boost aigus sur raspberry
+const HIGH_DEFAULT_GAIN = 2.2 // boost aigus sur tous les autres appareils
+const ATTACK = 0.45
 const RELEASE_BASE = 0.03
-const SILENCE_GATE = 0.015
-const RPI_SILENCE_GATE = 0.05  // gate plus élevé pour éviter les déclenchements parasites sur raspberry
-const SILENCE_FRAMES = 2
+const LIQUID_SMOOTH = 0.14   // lissage sortie pour notes tenues (EMA)
+const SILENCE_GATE = 0.04
+const RPI_SILENCE_GATE = 0.07  // gate plus élevé pour éviter les déclenchements parasites sur raspberry
+const SILENCE_FRAMES = 8      // ~133ms à 60fps avant de tomber au noir
 
 function isIOSMobile(): boolean {
   if (typeof navigator === 'undefined' || typeof window === 'undefined') return false
@@ -59,6 +61,7 @@ export function useAudioBands(options?: { micResetMs?: number, broadcast?: boole
 
   const belowCnt: Record<string, number> = { low: 0, mid1: 0, mid2: 0, high: 0 }
   const prevBands: Record<string, number> = { low: 0, mid1: 0, mid2: 0, high: 0 }
+  const smoothOut = { low: 0, mid1: 0, mid2: 0, high: 0 }
 
   let micResetTimerId: ReturnType<typeof setInterval> | null = null
   let micRestarting = false
@@ -158,7 +161,7 @@ export function useAudioBands(options?: { micResetMs?: number, broadcast?: boole
     const hsH = ctx.createBiquadFilter()
     hsH.type = 'highshelf'; hsH.frequency.value = 5000; hsH.gain.value = 6
     const highBoost = ctx.createGain()
-    highBoost.gain.value = deviceProfile === 'raspberry' ? HIGH_EXTRA_GAIN : 1.0
+    highBoost.gain.value = deviceProfile === 'raspberry' ? HIGH_EXTRA_GAIN : HIGH_DEFAULT_GAIN
     pre.connect(hsH); hsH.connect(highBoost)
     for (const fhp of [3600, 4400, 5200]) {
       const hp = ctx.createBiquadFilter()
@@ -185,10 +188,15 @@ export function useAudioBands(options?: { micResetMs?: number, broadcast?: boole
     prevBands.mid2 = applyEnv('mid2', prevBands.mid2, M2)
     prevBands.high = applyEnv('high', prevBands.high, H)
 
-    bands.low = prevBands.low
-    bands.mid1 = prevBands.mid1
-    bands.mid2 = prevBands.mid2
-    bands.high = prevBands.high
+    smoothOut.low  += (prevBands.low  - smoothOut.low)  * LIQUID_SMOOTH
+    smoothOut.mid1 += (prevBands.mid1 - smoothOut.mid1) * LIQUID_SMOOTH
+    smoothOut.mid2 += (prevBands.mid2 - smoothOut.mid2) * LIQUID_SMOOTH
+    smoothOut.high += (prevBands.high - smoothOut.high) * LIQUID_SMOOTH
+
+    bands.low = smoothOut.low
+    bands.mid1 = smoothOut.mid1
+    bands.mid2 = smoothOut.mid2
+    bands.high = smoothOut.high
 
     if (bcSender) {
       bcSender.postMessage({ low: bands.low, mid1: bands.mid1, mid2: bands.mid2, high: bands.high })

@@ -76,8 +76,8 @@ const ATK = 0.85, REL = 0.75, SLOW = 0.08
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 const pBand   = (r: number) => Math.min(1, Math.pow(Math.max(0, (r - 0.01) * 0.80), 0.65))
-const pVisual = (r: number) => Math.min(1, Math.pow(Math.max(0, (r - 0.01) * 2.00), 0.50))
-const pHigh   = (r: number) => Math.min(1, Math.pow(Math.max(0, (r - 0.01) * (isRaspberry ? 5.00 : 3.50)), 0.50))
+const pVisual = (r: number) => Math.min(1, Math.pow(Math.max(0, (r - 0.01) * 1.00), 0.55))
+const pHigh   = (r: number) => Math.min(1, Math.pow(Math.max(0, (r - 0.01) * (isRaspberry ? 2.50 : 1.30)), 0.55))
 
 let _tc: TimeColorTint = [1, 1, 1]
 
