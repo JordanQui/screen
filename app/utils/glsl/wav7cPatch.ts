@@ -167,7 +167,8 @@ void main() {
   res = hblend(res, prevPlain, 0.18 + E*0.25);
 
   // .color(tint)
-  res = hcol(res, u_tint.r, u_tint.g, u_tint.b);
+  vec3 t7c = 1.0 + (u_tint - vec3(1.0)) * 0.25;
+  res = hcol(res, t7c.r, t7c.g, t7c.b);
 
   gl_FragColor = clamp(res, 0.0, 1.0);
 }

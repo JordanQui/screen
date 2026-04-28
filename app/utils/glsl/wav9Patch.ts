@@ -142,8 +142,7 @@ void main() {
   float fbA = live ? min(0.88, 0.75 + E * 0.11) : 0.22;
   res = hblend(res, fb, fbA);
 
-  // Teinte à 35% pour préserver l'arc-en-ciel aux heures chaudes (soir/crépuscule)
-  vec3 t = 1.0 + (u_tint - vec3(1.0)) * 0.35;
+  vec3 t = 1.0 + (u_tint - vec3(1.0)) * 0.25;
   res = hcol(res, t.r, t.g, t.b);
 
   gl_FragColor = res;

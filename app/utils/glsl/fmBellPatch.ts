@@ -182,7 +182,8 @@ void main() {
 
   res = hluma(res, 0.09, 0.07);
   res = hbri(res, -0.04);
-  res = hcol(res, u_tint.r, u_tint.g, u_tint.b);
+  vec3 tfm = 1.0 + (u_tint - vec3(1.0)) * 0.25;
+  res = hcol(res, tfm.r, tfm.g, tfm.b);
 
   gl_FragColor = res;
 }
