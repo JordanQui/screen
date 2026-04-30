@@ -36,7 +36,7 @@ const NOISE_DB = -90
 const ENV_FAST = 0.5
 const ENV_SLOW = 0.02
 const TREMOLO_HISTORY = 32
-const FFT_SMOOTHING = 0.35
+const FFT_SMOOTHING = 0.72  // lissage élevé pour stabiliser les couleurs sur boucles/notes tenues
 
 interface VoiceTrack {
   midi: number

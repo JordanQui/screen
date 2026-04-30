@@ -77,7 +77,12 @@ const ATK = 0.85, REL = 0.75, SLOW = 0.08
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 const pBand   = (r: number) => Math.min(1, Math.pow(Math.max(0, (r - 0.01) * 0.80), 0.65))
 const pVisual = (r: number) => Math.min(1, Math.pow(Math.max(0, (r - 0.01) * 1.00), 0.55))
-const pHigh   = (r: number) => Math.min(1, Math.pow(Math.max(0, (r - 0.01) * (isRaspberry ? 2.50 : 1.30)), 0.55))
+// Boost dynamique ×8 au silence → ×1 à fort volume (utilise _energy du frame précédent)
+const pHigh = (r: number) => {
+  const base = isRaspberry ? 2.50 : 1.30
+  const dyn  = base * (1 + 7 * Math.pow(Math.max(0, 1 - _energy * 2), 1.5))
+  return Math.min(1, Math.pow(Math.max(0, (r - 0.01) * dyn), 0.55))
+}
 
 let _tc: TimeColorTint = [1, 1, 1]
 
@@ -85,7 +90,8 @@ const pitchAnalysis = inject<PitchAnalysisResult | null>('pitchAnalysis', null)
 // Couleurs pitch et mood lissées pour éviter les sauts brutaux
 let _pitchR = 0, _pitchG = 0, _pitchB = 0
 let _moodEnergy = 0, _moodTension = 0, _moodWarmth = 0, _moodBright = 0, _moodComplex = 0
-const PITCH_LERP = 0.05
+const PITCH_LERP = 1.00  // couleurs pitch — instantané (stabilité assurée par FFT_SMOOTHING=0.72 en amont)
+const MOOD_LERP  = 0.02  // valeurs de mood — très lentes pour stabiliser les couleurs sur boucles
 
 function smoothStep() {
   if (destroyed) return
@@ -114,15 +120,17 @@ function smoothStep() {
   if (colorTint?.value) _tc = colorTint.value
 
   if (pitchAnalysis) {
+    // Couleur pitch : instantanée (PITCH_LERP = 1) — la stabilité vient du FFT_SMOOTHING en amont
     const [pr, pg, pb] = pitchAnalysis.blendedColor
     _pitchR += (pr - _pitchR) * PITCH_LERP
     _pitchG += (pg - _pitchG) * PITCH_LERP
     _pitchB += (pb - _pitchB) * PITCH_LERP
-    _moodEnergy  += (pitchAnalysis.mood.energy     - _moodEnergy)  * PITCH_LERP
-    _moodTension += (pitchAnalysis.mood.tension    - _moodTension) * PITCH_LERP
-    _moodWarmth  += (pitchAnalysis.mood.warmth     - _moodWarmth)  * PITCH_LERP
-    _moodBright  += (pitchAnalysis.mood.brightness - _moodBright)  * PITCH_LERP
-    _moodComplex += (pitchAnalysis.mood.complexity - _moodComplex) * PITCH_LERP
+    // Mood : très lent pour éviter la modulation de couleur sur les boucles
+    _moodEnergy  += (pitchAnalysis.mood.energy     - _moodEnergy)  * MOOD_LERP
+    _moodTension += (pitchAnalysis.mood.tension    - _moodTension) * MOOD_LERP
+    _moodWarmth  += (pitchAnalysis.mood.warmth     - _moodWarmth)  * MOOD_LERP
+    _moodBright  += (pitchAnalysis.mood.brightness - _moodBright)  * MOOD_LERP
+    _moodComplex += (pitchAnalysis.mood.complexity - _moodComplex) * MOOD_LERP
   }
 
   smoothAF = requestAnimationFrame(smoothStep)

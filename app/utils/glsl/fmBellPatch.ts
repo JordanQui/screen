@@ -91,6 +91,22 @@ void main() {
   st.x = fract(st.x + sX);
   st.y = fract(st.y + sY);
 
+  // Déformation UV : fréquence spatiale des vagues ∝ fréquence audio de chaque bande
+  // basses → grandes vagues lentes   mid → vagues moyennes   aigus → micro-ondulations
+  float wL  = L  * 0.09;
+  float wM1 = M1 * 0.07;
+  float wM2 = M2 * 0.06;
+  float wH  = Hs * 0.05;
+  st.y += sin(st.x *  3.5 + t * 0.7)  * wL
+        + sin(st.x *  9.0 + t * 1.3)  * wM1
+        + sin(st.x * 17.0 + t * 2.2)  * wM2
+        + sin(st.x * 30.0 + t * 3.5)  * wH;
+  st.x += cos(st.y *  3.5 + t * 0.5)  * wL  * 0.6
+        + cos(st.y *  9.0 + t * 1.1)  * wM1 * 0.6
+        + cos(st.y * 17.0 + t * 1.9)  * wM2 * 0.6
+        + cos(st.y * 30.0 + t * 2.9)  * wH  * 0.6;
+  st = fract(st);
+
   // Fréquences des opérateurs FM
   float fm3  = 2.0  + sMv2 * 3.5  + sLv * 2.0;     // Op3: sub-mod lent
   float fm2  = 6.0  + sMv1 * 8.0  + sMv2 * 3.5;    // Op2: modulator
@@ -173,6 +189,10 @@ void main() {
   fbUv = rot2d(fbUv - 0.5, -rotA * 0.55) + 0.5;
   // Micro-warp FM sur le feedback (conserve le caractère FM dans le sustain)
   fbUv += vec2(s2x, s2y) * (L + M1) * 0.005;
+  // Vagues dans le feedback : basses font slosh, aigus ajoutent texture fine
+  fbUv.y += sin(fbUv.x *  3.5 + t * 0.7) * wL  * 0.35
+          + sin(fbUv.x * 17.0 + t * 2.2) * wM2 * 0.30
+          + sin(fbUv.x * 30.0 + t * 3.5) * wH  * 0.25;
   fbUv  = clamp(fbUv, 0.0, 1.0);
 
   vec4 fb = texture2D(u_prev, fbUv);
