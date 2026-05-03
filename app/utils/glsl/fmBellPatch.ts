@@ -172,14 +172,21 @@ void main() {
   cL  = hcol(cL,  bL  * 2.0 * cLow.r,  bL  * 2.0 * cLow.g,  bL  * 2.0 * cLow.b);
   cM1 = hcol(cM1, bM1 * 2.0 * cMid1.r, bM1 * 2.0 * cMid1.g, bM1 * 2.0 * cMid1.b);
   cM2 = hcol(cM2, bM2 * 2.2 * cMid2.r, bM2 * 2.2 * cMid2.g, bM2 * 2.2 * cMid2.b);
-  cHi = hcol(cHi, bHi * 3.0 * cHigh.r, bHi * 3.0 * cHigh.g, bHi * 3.0 * cHigh.b);
+  cHi = hcol(cHi, bHi * 2.5 * cHigh.r, bHi * 2.5 * cHigh.g, bHi * 2.5 * cHigh.b);
 
-  vec4 res = cL;
-  res = hadd(res, cM1, min(1.0, M1 * 5.0));
-  res = hadd(res, cM2, min(1.0, M2 * 5.0));
-  res = hadd(res, cHi, min(1.0, Hs * 6.0));
-  res = hsat(res, 2.0);
-  res = hcon(res, 1.6);
+  // Accumulation sans écrêtage intermédiaire — évite la perte de teinte au clamp
+  vec4 res = cL
+           + cM1 * min(1.0, M1 * 5.0)
+           + cM2 * min(1.0, M2 * 5.0)
+           + cHi * min(1.0, Hs * 5.0);
+  // Reinhard sur le pic max — préserve les ratios de teinte à fort volume
+  float pk = max(res.r, max(res.g, res.b));
+  float tpk = pk / (pk + 0.6);
+  if (pk > 0.001) res.rgb *= (tpk / pk);
+  res.rgb = pow(clamp(res.rgb, 0.0, 1.0), vec3(0.80));
+  res.a = 1.0;
+  res = hsat(res, 1.8);
+  res = hcon(res, 1.5);
 
   // ─── Feedback: sustain + dérive spectrale (decay de cloche) ─────────────────
   float fbA = min(0.50, (L + M1 + M2 + Hs) * 0.22 + 0.07);

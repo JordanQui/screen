@@ -36,11 +36,11 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   return [f(0), f(8), f(4)]
 }
 
-// Octave grave → sombre (L=28%), aigu → brillant (L=72%)
+// Octave 0 (~20-32 Hz) → noir (L=0%), octave 9 (~10 kHz+) → blanc (L=100%)
 export function noteToColor(noteIndex: number, octave: number): [number, number, number] {
   const hue = noteToHue(noteIndex)
-  const clamped = Math.min(Math.max(octave, 1), 7)
-  const lightness = 28 + (clamped - 1) * 7.3
+  const clamped = Math.min(Math.max(octave, 0), 9)
+  const lightness = (clamped / 9) * 100
   return hslToRgb(hue, 85, lightness)
 }
 
