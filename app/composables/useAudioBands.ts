@@ -12,6 +12,8 @@ const HIGH_DEFAULT_GAIN = 2.2 // boost aigus sur tous les autres appareils
 const ATTACK = 0.1           // instantané — sons brefs capturés sans délai
 const RELEASE_BASE = 0.1     // descente rapide (~4-5 frames pour retomber)
 const LIQUID_SMOOTH = 1  // lissage sortie (EMA visuelle)
+const LOW_TAME_THRESHOLD = 0.5  // au-delà de ce niveau global, les graves sont atténués
+const LOW_TAME_FACTOR = 0.45    // multiplicateur minimum des graves à plein volume
 const SILENCE_GATE = 0.04
 const RPI_SILENCE_GATE = 0.07  // gate plus élevé pour éviter les déclenchements parasites sur raspberry
 const SILENCE_FRAMES = 8      // ~133ms à 60fps — assez pour tremolo voix, assez court pour sons brefs
@@ -182,7 +184,13 @@ export function useAudioBands(options?: { micResetMs?: number, broadcast?: boole
     const M2 = anM2.length ? levelFromAnalysersMax(anM2, bufM2) : 0
     const H = anHigh.length ? levelFromAnalysersMax(anHigh, bufHigh) : 0
 
-    prevBands.low = applyEnv('low', prevBands.low, L)
+    // Taming dynamique des graves : réduit low proportionnellement au volume global
+    const overall = Math.max(L, M1, M2, H)
+    const lowTame = overall > LOW_TAME_THRESHOLD
+      ? 1 - (1 - LOW_TAME_FACTOR) * ((overall - LOW_TAME_THRESHOLD) / (1 - LOW_TAME_THRESHOLD))
+      : 1
+
+    prevBands.low = applyEnv('low', prevBands.low, L * lowTame)
     prevBands.mid1 = applyEnv('mid1', prevBands.mid1, M1)
     prevBands.mid2 = applyEnv('mid2', prevBands.mid2, M2)
     prevBands.high = applyEnv('high', prevBands.high, H)
