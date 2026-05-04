@@ -1,21 +1,21 @@
 import type { HydraBandValues } from '~/utils/hydra/types'
 
-const FFT_SIZE = 512
+const FFT_SIZE = 2048  // fenêtre 42.7ms à 48kHz → stable pour toutes fréquences > 12Hz
 const SENS_GAIN = 4.0
 const IOS_MOBILE_GAIN_MULTIPLIER = 8
-const NOISE_FLOOR = 0.15
-const RPI_NOISE_FLOOR = 0.25  // seuil plus élevé pour filtrer les bruits faibles sur raspberry
+const NOISE_FLOOR = 0.23
+const RPI_NOISE_FLOOR = 0.3  // seuil plus élevé pour filtrer les bruits faibles sur raspberry
 const GAIN = 1
 const GAMMA = 0.7
 const HIGH_EXTRA_GAIN = 3.0   // boost aigus sur raspberry
 const HIGH_DEFAULT_GAIN = 2.2 // boost aigus sur tous les autres appareils
 const ATTACK = 0.1           // instantané — sons brefs capturés sans délai
 const RELEASE_BASE = 0.1     // descente rapide (~4-5 frames pour retomber)
-const LIQUID_SMOOTH = 1  // lissage sortie (EMA visuelle)
+const LIQUID_SMOOTH = 1  // lissage sortie (EMA visuelle) — alpha faible = lissage fort
 const LOW_TAME_THRESHOLD = 0.5  // au-delà de ce niveau global, les graves sont atténués
 const LOW_TAME_FACTOR = 0.45    // multiplicateur minimum des graves à plein volume
 const SILENCE_GATE = 0.04
-const RPI_SILENCE_GATE = 0.07  // gate plus élevé pour éviter les déclenchements parasites sur raspberry
+const RPI_SILENCE_GATE = 0.2  // gate plus élevé pour éviter les déclenchements parasites sur raspberry
 const SILENCE_FRAMES = 8      // ~133ms à 60fps — assez pour tremolo voix, assez court pour sons brefs
 
 function isIOSMobile(): boolean {
