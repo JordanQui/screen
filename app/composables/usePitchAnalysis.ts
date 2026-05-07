@@ -1,8 +1,8 @@
 import {
   midiToFreq,
   midiToNoteInfo,
-  noteToHue,
-  noteToColor,
+  midiToHue,
+  midiToColor,
   harmonicSalience,
   blendHues,
   blendColors,
@@ -204,8 +204,8 @@ export function usePitchAnalysis() {
           noteName,
           octave,
           salience: (salienceArr[peakIdx] ?? 0) / maxSalience,
-          hue: noteToHue(noteIndex),
-          color: noteToColor(noteIndex, octave),
+          hue: midiToHue(midi),
+          color: midiToColor(midi),
           vibratoDepth,
           vibratoRate,
         } satisfies DetectedNote

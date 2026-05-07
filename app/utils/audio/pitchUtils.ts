@@ -1,7 +1,11 @@
-// Mapping chromatique : C=rouge, gravité vers sombre, aigu vers brillant
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const
-// 12 demi-tons répartis sur la roue des teintes (30° par demi-ton, C = 0° rouge)
-const NOTE_HUES = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330] as const
+
+// Gradient fréquentiel continu : C1 (MIDI 24, ~32 Hz) → rouge (0°), C5 (MIDI 72, ~523 Hz) → violet (270°)
+// Miroir du spectre lumineux : basse fréquence audio = grande longueur d'onde = rouge
+const MIDI_C1 = 24
+const MIDI_C5 = 72
+const HUE_MIN = 0    // rouge — graves
+const HUE_MAX = 270  // violet — aigus (évite le rebouclage rose/magenta 270°–360°)
 
 export function freqToMidi(freq: number): number {
   return 12 * Math.log2(freq / 440) + 69
@@ -23,10 +27,6 @@ export function midiToNoteInfo(midi: number): {
   return { noteIndex, noteName: NOTE_NAMES[noteIndex]! + octave, octave }
 }
 
-export function noteToHue(noteIndex: number): number {
-  return NOTE_HUES[noteIndex]!
-}
-
 // h: 0-360, s: 0-100, l: 0-100 → RGB 0-1
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   s /= 100; l /= 100
@@ -36,12 +36,14 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   return [f(0), f(8), f(4)]
 }
 
-// Octave 0 (~20-32 Hz) → noir (L=0%), octave 9 (~10 kHz+) → blanc (L=100%)
-export function noteToColor(noteIndex: number, octave: number): [number, number, number] {
-  const hue = noteToHue(noteIndex)
-  const clamped = Math.min(Math.max(octave, 0), 9)
-  const lightness = (clamped / 9) * 100
-  return hslToRgb(hue, 85, lightness)
+// Gradient continu : chaque MIDI reçoit une teinte interpolée sur C1-C5
+export function midiToHue(midi: number): number {
+  const t = Math.max(0, Math.min(1, (midi - MIDI_C1) / (MIDI_C5 - MIDI_C1)))
+  return HUE_MIN + t * (HUE_MAX - HUE_MIN)
+}
+
+export function midiToColor(midi: number): [number, number, number] {
+  return hslToRgb(midiToHue(midi), 90, 50)
 }
 
 // Saillance harmonique d'un candidat f0 dans le spectre de magnitudes linéaires.
