@@ -1,6 +1,6 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import type { TimeColorTint } from '~/utils/hydra/timeColors'
-import { getSlotTint, lerpTint } from '~/utils/hydra/timeColors'
+import type { TimeColorTint } from '~/utils/glsl/timeColors'
+import { getSlotTint, lerpTint } from '~/utils/glsl/timeColors'
 
 const STORAGE_KEY = 'hydra-time-colors-enabled'
 // ~20s pour atteindre 99% de la cible à 60fps : (1 - k)^(20×60) ≈ 0.01, k ≈ 0.004

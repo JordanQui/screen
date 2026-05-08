@@ -1,4 +1,4 @@
-import type { HydraBandValues } from '~/utils/hydra/types'
+import type { HydraBandValues } from '~/utils/glsl/types'
 
 const FFT_SIZE = 2048  // fenêtre 42.7ms à 48kHz → stable pour toutes fréquences > 12Hz
 const SENS_GAIN = 4.0

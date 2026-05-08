@@ -34,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { getTimeMomentLabel } from '~/utils/hydra/timeColors'
+import { getTimeMomentLabel } from '~/utils/glsl/timeColors'
 
 const route = useRoute()
 const config = useRuntimeConfig()

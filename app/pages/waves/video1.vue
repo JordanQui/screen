@@ -7,7 +7,7 @@
 
 <script setup lang="ts">
 import type { Ref } from 'vue'
-import type { HydraBandValues, TimeColorTint } from '~/utils/hydra/types'
+import type { HydraBandValues, TimeColorTint } from '~/utils/glsl/types'
 
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null)

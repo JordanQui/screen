@@ -14,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-import type { HydraApi, HydraBandValues, HydraPatchController, PatchFactory, TimeColorTint } from '~/utils/hydra/types'
+import type { HydraApi, HydraBandValues, HydraPatchController, PatchFactory, TimeColorTint } from '~/utils/glsl/types'
 
 const props = defineProps<{
   patchFactory: PatchFactory

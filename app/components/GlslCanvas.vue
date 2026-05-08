@@ -3,7 +3,7 @@
 </template>
 
 <script setup lang="ts">
-import type { HydraBandValues, TimeColorTint } from '~/utils/hydra/types'
+import type { HydraBandValues, TimeColorTint } from '~/utils/glsl/types'
 import type { GlslPatch } from '~/utils/glsl/types'
 import type { PitchAnalysisResult } from '~/utils/audio/types'
 

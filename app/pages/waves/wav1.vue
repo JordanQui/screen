@@ -8,7 +8,7 @@
 
 <script setup lang="ts">
 import type { Ref } from 'vue'
-import type { HydraBandValues } from '~/utils/hydra/types'
+import type { HydraBandValues } from '~/utils/glsl/types'
 import { createWav1Patch } from '~/utils/hydra/wav1Patch'
 
 const bands = inject<HydraBandValues>('audioBands', reactive({ low: 0, mid1: 0, mid2: 0, high: 0 }))
