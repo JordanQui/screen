@@ -2,8 +2,11 @@ const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 
 
 // Gradient fréquentiel continu : C1 (MIDI 24, ~32 Hz) → rouge (0°), C5 (MIDI 72, ~523 Hz) → violet (270°)
 // Miroir du spectre lumineux : basse fréquence audio = grande longueur d'onde = rouge
-const MIDI_C1 = 24
-const MIDI_C5 = 72
+// Avant C1 : infrarouge → noir  |  Après C5 : ultraviolet → blanc
+const MIDI_C0 = 12   // une octave sous C1 — noir complet (infrarouge)
+const MIDI_C1 = 24   // rouge — début du spectre visible
+const MIDI_C5 = 72   // violet — fin du spectre visible
+const MIDI_C6 = 84   // une octave au-dessus de C5 — blanc complet (ultraviolet)
 const HUE_MIN = 0    // rouge — graves
 const HUE_MAX = 270  // violet — aigus (évite le rebouclage rose/magenta 270°–360°)
 
@@ -43,6 +46,16 @@ export function midiToHue(midi: number): number {
 }
 
 export function midiToColor(midi: number): [number, number, number] {
+  if (midi < MIDI_C1) {
+    // Sous le rouge : infrarouge → noir
+    const t = Math.max(0, (midi - MIDI_C0) / (MIDI_C1 - MIDI_C0))
+    return hslToRgb(HUE_MIN, 90, t * 50)
+  }
+  if (midi > MIDI_C5) {
+    // Au-dessus du violet : ultraviolet → blanc
+    const t = Math.min(1, (midi - MIDI_C5) / (MIDI_C6 - MIDI_C5))
+    return hslToRgb(HUE_MAX, 90 * (1 - t), 50 + t * 50)
+  }
   return hslToRgb(midiToHue(midi), 90, 50)
 }
 
