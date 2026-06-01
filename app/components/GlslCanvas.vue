@@ -3,8 +3,7 @@
 </template>
 
 <script setup lang="ts">
-import type { HydraBandValues, TimeColorTint } from '~/utils/glsl/types'
-import type { GlslPatch } from '~/utils/glsl/types'
+import type { HydraBandValues, GlslPatch } from '~/utils/glsl/types'
 import type { PitchAnalysisResult } from '~/utils/audio/types'
 
 const props = defineProps<{
@@ -17,8 +16,6 @@ const { public: { deviceProfile } } = useRuntimeConfig()
 const isRaspberry = deviceProfile === 'raspberry'
 
 const canvasEl = ref<HTMLCanvasElement | null>(null)
-const colorTint = inject<Ref<TimeColorTint> | null>('timeColorTint', null)
-
 // ── Typed uniform locations ────────────────────────────────────────────────────
 type ULocs = {
   prev:          WebGLUniformLocation | null
@@ -84,8 +81,6 @@ const pHigh = (r: number) => {
   return Math.min(1, Math.pow(Math.max(0, (r - 0.01) * dyn), 0.55))
 }
 
-let _tc: TimeColorTint = [1, 1, 1]
-
 const pitchAnalysis = inject<PitchAnalysisResult | null>('pitchAnalysis', null)
 // Couleurs pitch et mood lissées pour éviter les sauts brutaux
 let _pitchR = 0, _pitchG = 0, _pitchB = 0
@@ -116,8 +111,6 @@ function smoothStep() {
   _sMv1 += (_Mv1 - _sMv1) * SLOW
   _sMv2 += (_Mv2 - _sMv2) * SLOW
   _sHv  += (_Hv  - _sHv)  * SLOW
-
-  if (colorTint?.value) _tc = colorTint.value
 
   if (pitchAnalysis) {
     // Couleur pitch : instantanée (PITCH_LERP = 1) — la stabilité vient du FFT_SMOOTHING en amont
@@ -258,7 +251,7 @@ function frame() {
   if (u.rawMv1 !== null) g.uniform1f(u.rawMv1, props.bands.mid1)
   if (u.rawMv2 !== null) g.uniform1f(u.rawMv2, props.bands.mid2)
   if (u.rawHv  !== null) g.uniform1f(u.rawHv,  props.bands.high)
-  if (u.tint        !== null) g.uniform3fv(u.tint,  _tc)
+  if (u.tint        !== null) g.uniform3fv(u.tint,  [1, 1, 1])
   if (u.time        !== null) g.uniform1f(u.time,   t)
   if (u.pitchColor  !== null) g.uniform3f(u.pitchColor,  _pitchR, _pitchG, _pitchB)
   if (u.moodEnergy  !== null) g.uniform1f(u.moodEnergy,  _moodEnergy)

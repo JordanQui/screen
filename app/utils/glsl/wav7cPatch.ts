@@ -124,6 +124,12 @@ void main() {
   float modAmt = (0.005 + (sLv+sMv1)*0.018) * FB_G;
   vec2 stW = st + field * modAmt * 0.5;
 
+  // Distorsion UV sur aigus forts
+  float hiD = pow(max(0.0, (Hs - 0.25) / 0.75), 2.2);
+  stW.x += sin(stW.y * 42.0 + u_time * 7.0) * hiD * 0.06;
+  stW.y += cos(stW.x * 42.0 + u_time * 7.0) * hiD * 0.06;
+  stW = fract(stW);
+
   // Oscillateurs au UV warpé (= modulate en Hydra)
   vec4 oscLo = hcol(hosc(stW, fLow, sLv*0.25),              Lv*3.0,  Lv*0.6,  Lv*0.4);
   vec4 oscM1 = hcol(hosc(stW, fM1,  1.0),                   Mv1*2.5, Mv1*1.8, Mv1*0.5);
@@ -165,6 +171,10 @@ void main() {
   // .blend(o0, 0.18+E*0.25) — fondu temporel avec frame précédente (zoom feedback)
   vec4 prevPlain = texture2D(u_prev, st);
   res = hblend(res, prevPlain, 0.18 + E*0.25);
+
+  // Flash blanc distordu sur aigus forts
+  float hiBlast = pow(max(0.0, (Hs - 0.28) / 0.72), 1.8);
+  res.rgb = mix(res.rgb, vec3(1.0), hiBlast * 0.92);
 
   // .color(tint)
   vec3 t7c = 1.0 + (u_tint - vec3(1.0)) * 0.25;

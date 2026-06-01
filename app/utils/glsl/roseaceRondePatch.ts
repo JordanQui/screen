@@ -148,6 +148,10 @@ void main() {
   float lumaMask = dot(res.rgb, vec3(0.299, 0.587, 0.114));
   res *= smoothstep(lumaThresh - 0.04, lumaThresh + 0.04, lumaMask);
 
+  // Flash lumineux sur aigus forts (logo s'embrase)
+  float hiBlast = pow(max(0.0, (Hs - 0.28) / 0.72), 1.8);
+  res.rgb = clamp(res.rgb + vec3(hiBlast * 0.85), 0.0, 1.0);
+
   gl_FragColor = res;
 }
 `,

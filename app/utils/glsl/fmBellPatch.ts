@@ -107,6 +107,12 @@ void main() {
         + cos(st.y * 30.0 + t * 2.9)  * wH  * 0.6;
   st = fract(st);
 
+  // Distorsion UV sur aigus forts
+  float hiD = pow(max(0.0, (Hh - 0.28) / 0.72), 2.2);
+  st.x += sin(st.y * 40.0 + t * 6.5) * hiD * 0.06;
+  st.y += cos(st.x * 40.0 + t * 6.5) * hiD * 0.06;
+  st = fract(st);
+
   // Fréquences des opérateurs FM
   float fm3  = 2.0  + sMv2 * 3.5  + sLv * 2.0;     // Op3: sub-mod lent
   float fm2  = 6.0  + sMv1 * 8.0  + sMv2 * 3.5;    // Op2: modulator
@@ -209,6 +215,11 @@ void main() {
 
   res = hluma(res, 0.09, 0.07);
   res = hbri(res, -0.04);
+
+  // Flash blanc distordu sur aigus forts
+  float hiBlast = pow(max(0.0, (Hh - 0.32) / 0.68), 1.8);
+  res.rgb = mix(res.rgb, vec3(1.0), hiBlast * 0.92);
+
   vec3 tfm = 1.0 + (u_tint - vec3(1.0)) * 0.25;
   res = hcol(res, tfm.r, tfm.g, tfm.b);
 

@@ -6,13 +6,11 @@
 </template>
 
 <script setup lang="ts">
-import type { Ref } from 'vue'
-import type { HydraBandValues, TimeColorTint } from '~/utils/glsl/types'
+import type { HydraBandValues } from '~/utils/glsl/types'
 
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null)
-const bands     = inject<HydraBandValues>('audioBands', reactive({ low: 0, mid1: 0, mid2: 0, high: 0 }))
-const colorTint = inject<Ref<TimeColorTint> | null>('timeColorTint', null)
+const bands = inject<HydraBandValues>('audioBands', reactive({ low: 0, mid1: 0, mid2: 0, high: 0 }))
 
 // ── Shaders ─────────────────────────────────────────────────────────────────
 
@@ -125,7 +123,6 @@ type ULocs = {
   Mv1:   WebGLUniformLocation | null
   Mv2:   WebGLUniformLocation | null
   Hv:    WebGLUniformLocation | null
-  tint:  WebGLUniformLocation | null
   time:  WebGLUniformLocation | null
   res:   WebGLUniformLocation | null
 }
@@ -151,7 +148,6 @@ let lastFrameNow = 0
 // ── Audio smoothing ──────────────────────────────────────────────────────────
 
 let _Lv = 0, _Mv1 = 0, _Mv2 = 0, _Hv = 0
-let _tc: TimeColorTint = [1, 1, 1]
 const ATK = 0.85, REL = 0.75
 const lerp    = (a: number, b: number, t: number) => a + (b - a) * t
 const pBand   = (r: number) => Math.min(1, Math.pow(Math.max(0, (r - 0.01) * 0.80), 0.65))
@@ -165,7 +161,6 @@ function smoothLoop() {
   _Mv1 = lerp(_Mv1, rM1, rM1 > _Mv1 ? ATK : REL)
   _Mv2 = lerp(_Mv2, rM2, rM2 > _Mv2 ? ATK : REL)
   _Hv  = lerp(_Hv,  rH,  rH  > _Hv  ? ATK : REL)
-  if (colorTint?.value) _tc = colorTint.value
   smoothAF = requestAnimationFrame(smoothLoop)
 }
 
@@ -282,7 +277,6 @@ function frame() {
   if (U.Mv1  !== null) g.uniform1f(U.Mv1,  _Mv1)
   if (U.Mv2  !== null) g.uniform1f(U.Mv2,  _Mv2)
   if (U.Hv   !== null) g.uniform1f(U.Hv,   _Hv)
-  if (U.tint !== null) g.uniform3fv(U.tint, _tc)
   if (U.time !== null) g.uniform1f(U.time,  t)
   if (U.res  !== null) g.uniform2f(U.res,   W, H)
 
@@ -391,7 +385,6 @@ async function init() {
     Mv1:   loc('u_Mv1'),
     Mv2:   loc('u_Mv2'),
     Hv:    loc('u_Hv'),
-    tint:  loc('u_tint'),
     time:  loc('u_time'),
     res:   loc('u_resolution'),
   }

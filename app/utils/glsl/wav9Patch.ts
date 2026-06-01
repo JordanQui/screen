@@ -91,6 +91,12 @@ void main() {
   float wfM2 = hn(st, 0.50 + Mv2 * 0.035, 0.0);
   float wfH  = hn(st, 0.80 + Hv  * 0.080, 0.0);
 
+  // Distorsion UV sur aigus forts
+  float hiD = pow(max(0.0, (Hv - 0.25) / 0.75), 2.2);
+  st.x += sin(st.y * 42.0 + 7.0) * hiD * 0.06;
+  st.y += cos(st.x * 42.0 + 7.0) * hiD * 0.06;
+  st = fract(st);
+
   // Couleurs pilotées par l'analyse de pitch
   vec3 pc   = max(u_pitch_color, vec3(0.06));
   vec3 ph   = rgb2hsv(pc);
@@ -141,6 +147,10 @@ void main() {
 
   float fbA = live ? min(0.88, 0.75 + E * 0.11) : 0.22;
   res = hblend(res, fb, fbA);
+
+  // Flash blanc distordu sur aigus forts
+  float hiBlast = pow(max(0.0, (Hv - 0.28) / 0.72), 1.8);
+  res.rgb = mix(res.rgb, vec3(1.0), hiBlast * 0.92);
 
   vec3 t = 1.0 + (u_tint - vec3(1.0)) * 0.25;
   res = hcol(res, t.r, t.g, t.b);

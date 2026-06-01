@@ -110,6 +110,12 @@ void main() {
   st += vec2(hn(st, nsHigh, 0.0), hn(st, nsHigh, 9.1)) * aHigh;
   st  = fract(st);
 
+  // Distorsion UV sur aigus forts
+  float hiD = pow(max(0.0, (Hh - 0.28) / 0.72), 2.2);
+  st.x += sin(st.y * 44.0 + u_time * 7.5) * hiD * 0.06;
+  st.y += cos(st.x * 44.0 + u_time * 7.5) * hiD * 0.06;
+  st = fract(st);
+
   // fréquences
   float fLow  = 7.0  + L  * 20.0 + Hs * 5.0
               + L  * 2.8 * (sin(u_time * 0.75) + sin(u_time * 1.31))  * 0.5;
@@ -163,6 +169,11 @@ void main() {
 
   res = hluma(res, 0.10, 0.08);
   res = hbri(res, -0.05);
+
+  // Flash blanc distordu sur aigus forts
+  float hiBlast = pow(max(0.0, (Hh - 0.32) / 0.68), 1.8);
+  res.rgb = mix(res.rgb, vec3(1.0), hiBlast * 0.92);
+
   vec3 t8 = 1.0 + (u_tint - vec3(1.0)) * 0.25;
   res = hcol(res, t8.r, t8.g, t8.b);
 

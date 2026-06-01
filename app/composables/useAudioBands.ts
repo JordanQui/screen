@@ -1,15 +1,20 @@
 import type { HydraBandValues } from '~/utils/glsl/types'
 
 const FFT_SIZE = 2048  // fenêtre 42.7ms à 48kHz → stable pour toutes fréquences > 12Hz
+const HIGH_FFT_SIZE = 512  // fenêtre 10.7ms — transitoires courts (hi-hats) moins dilués
 const SENS_GAIN = 4.0
 const IOS_MOBILE_GAIN_MULTIPLIER = 8
 const NOISE_FLOOR = 0.23
 const RPI_NOISE_FLOOR = 0.3  // seuil plus élevé pour filtrer les bruits faibles sur raspberry
 const GAIN = 1
 const GAMMA = 0.7
-const HIGH_EXTRA_GAIN = 3.0   // boost aigus sur raspberry
-const HIGH_DEFAULT_GAIN = 2.2 // boost aigus sur tous les autres appareils
-const ATTACK = 0.1           // instantané — sons brefs capturés sans délai
+const HIGH_EXTRA_GAIN = 5.5   // boost aigus sur raspberry (était 3.0)
+const HIGH_DEFAULT_GAIN = 4.5 // boost aigus sur tous les autres appareils (était 2.2)
+const HIGH_NOISE_FLOOR = 0.06 // seuil bas dédié aigus — capture hi-hats à bas volume
+const HIGH_GAMMA = 0.40       // compression plus agressive → plus de boost sur sons faibles
+const HIGH_PEAK_GAIN = 2.8    // poids du peak vs RMS dans la détection aiguë
+const HIGH_SILENCE_GATE_FACTOR = 0.4  // gate aigus = silenceGate * 0.4 → plus sensible
+const ATTACK = 0.1           // montée progressive pour graves/médiums
 const RELEASE_BASE = 0.1     // descente rapide (~4-5 frames pour retomber)
 const LIQUID_SMOOTH = 1  // lissage sortie (EMA visuelle) — alpha faible = lissage fort
 const LOW_TAME_THRESHOLD = 0.5  // au-delà de ce niveau global, les graves sont atténués
@@ -103,11 +108,50 @@ export function useAudioBands(options?: { micResetMs?: number, broadcast?: boole
     return m
   }
 
+  // Détection dédiée aigus : noise floor bas + gamma agressif + peak fort → hi-hats à bas volume
+  function levelFromBufferHigh(buf: Float32Array): number {
+    let s = 0, peak = 0
+    for (let i = 0; i < buf.length; i++) {
+      const x = buf[i], ax = x < 0 ? -x : x
+      s += x * x
+      if (ax > peak) peak = ax
+    }
+    const rms = Math.sqrt(s / buf.length)
+    let yR = Math.max(0, rms - HIGH_NOISE_FLOOR) * GAIN
+    if (yR > 1) yR = 1
+    yR = Math.pow(yR, HIGH_GAMMA)
+    let yP = Math.max(0, peak - HIGH_NOISE_FLOOR * 0.35) * (GAIN * HIGH_PEAK_GAIN)
+    if (yP > 1) yP = 1
+    yP = Math.pow(yP, HIGH_GAMMA)
+    return Math.max(yR, yP)
+  }
+
+  function levelFromAnalysersMaxHigh(list: AnalyserNode[], buffers: Float32Array[]): number {
+    if (!list.length) return 0
+    let m = 0
+    for (let i = 0; i < list.length; i++) {
+      list[i].getFloatTimeDomainData(buffers[i])
+      const v = levelFromBufferHigh(buffers[i])
+      if (v > m) m = v
+    }
+    return m
+  }
+
   function applyEnv(name: string, prev: number, next: number): number {
     if (next < silenceGate) belowCnt[name]++
     else belowCnt[name] = 0
     if (belowCnt[name] >= SILENCE_FRAMES) return 0
     if (next >= prev) return prev + (next - prev) * ATTACK
+    return prev + (next - prev) * RELEASE_BASE
+  }
+
+  // Attaque instantanée pour les aigus — capture chaque hi-hat même très court
+  function applyEnvHigh(prev: number, next: number): number {
+    const gate = silenceGate * HIGH_SILENCE_GATE_FACTOR
+    if (next < gate) belowCnt.high++
+    else belowCnt.high = 0
+    if (belowCnt.high >= SILENCE_FRAMES) return 0
+    if (next >= prev) return next  // instantané — pas de lissage sur la montée
     return prev + (next - prev) * RELEASE_BASE
   }
 
@@ -158,17 +202,19 @@ export function useAudioBands(options?: { micResetMs?: number, broadcast?: boole
       lp.connect(an); an.connect(zeroOut); anM2.push(an)
     }
 
-    // HIGH
+    // HIGH — sensibilité renforcée pour transitoires courts (hi-hats, cymbales)
     const hsH = ctx.createBiquadFilter()
-    hsH.type = 'highshelf'; hsH.frequency.value = 5000; hsH.gain.value = 6
+    hsH.type = 'highshelf'; hsH.frequency.value = 4000; hsH.gain.value = 8
+    const pkHiHat = ctx.createBiquadFilter()
+    pkHiHat.type = 'peaking'; pkHiHat.frequency.value = 10000; pkHiHat.Q.value = 1.0; pkHiHat.gain.value = 9
     const highBoost = ctx.createGain()
     highBoost.gain.value = deviceProfile === 'raspberry' ? HIGH_EXTRA_GAIN : HIGH_DEFAULT_GAIN
-    pre.connect(hsH); hsH.connect(highBoost)
+    pre.connect(hsH); hsH.connect(pkHiHat); pkHiHat.connect(highBoost)
     for (const fhp of [3600, 4400, 5200]) {
       const hp = ctx.createBiquadFilter()
       hp.type = 'highpass'; hp.frequency.value = fhp; hp.Q.value = 0.707
       highBoost.connect(hp)
-      const an = ctx.createAnalyser(); an.fftSize = FFT_SIZE
+      const an = ctx.createAnalyser(); an.fftSize = HIGH_FFT_SIZE
       hp.connect(an); an.connect(zeroOut); anHigh.push(an)
     }
 
@@ -182,7 +228,7 @@ export function useAudioBands(options?: { micResetMs?: number, broadcast?: boole
     const L = anLow.length ? levelFromAnalysersMax(anLow, bufLow) : 0
     const M1 = anM1.length ? levelFromAnalysersMax(anM1, bufM1) : 0
     const M2 = anM2.length ? levelFromAnalysersMax(anM2, bufM2) : 0
-    const H = anHigh.length ? levelFromAnalysersMax(anHigh, bufHigh) : 0
+    const H = anHigh.length ? levelFromAnalysersMaxHigh(anHigh, bufHigh) : 0
 
     // Taming dynamique des graves : réduit low proportionnellement au volume global
     const overall = Math.max(L, M1, M2, H)
@@ -193,7 +239,7 @@ export function useAudioBands(options?: { micResetMs?: number, broadcast?: boole
     prevBands.low = applyEnv('low', prevBands.low, L * lowTame)
     prevBands.mid1 = applyEnv('mid1', prevBands.mid1, M1)
     prevBands.mid2 = applyEnv('mid2', prevBands.mid2, M2)
-    prevBands.high = applyEnv('high', prevBands.high, H)
+    prevBands.high = applyEnvHigh(prevBands.high, H)
 
     smoothOut.low  += (prevBands.low  - smoothOut.low)  * LIQUID_SMOOTH
     smoothOut.mid1 += (prevBands.mid1 - smoothOut.mid1) * LIQUID_SMOOTH

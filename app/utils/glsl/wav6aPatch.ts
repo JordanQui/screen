@@ -88,6 +88,12 @@ void main() {
   st += vec2(hn(st, flowSc, 0.0), hn(st, flowSc, 7.31)) * flowA;
   st  = fract(st);
 
+  // Distorsion UV sur aigus forts (hi-hats, sss, cymbales)
+  float hiD = pow(max(0.0, (Hh - 0.28) / 0.72), 2.2);
+  st.x += sin(st.y * 42.0 + u_time * 7.0) * hiD * 0.06;
+  st.y += cos(st.x * 42.0 + u_time * 7.0) * hiD * 0.06;
+  st = fract(st);
+
   // time-modulated frequencies
   float fLow  = 8.0  + L  * 22.0 + Hs * 6.0
               + L  * 3.0 * (sin(u_time * 0.90) + sin(u_time * 1.457)) * 0.5;
@@ -135,6 +141,11 @@ void main() {
 
   res = hluma(res, 0.12, 0.08);
   res = hbri(res, -0.08);
+
+  // Flash blanc distordu : sss/cymbale fort → saturation vers blanc
+  float hiBlast = pow(max(0.0, (Hh - 0.32) / 0.68), 1.8);
+  res.rgb = mix(res.rgb, vec3(1.0), hiBlast * 0.92);
+
   vec3 t6a = 1.0 + (u_tint - vec3(1.0)) * 0.25;
   res = hcol(res, t6a.r, t6a.g, t6a.b);
 

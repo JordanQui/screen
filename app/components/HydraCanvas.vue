@@ -14,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-import type { HydraApi, HydraBandValues, HydraPatchController, PatchFactory, TimeColorTint } from '~/utils/glsl/types'
+import type { HydraApi, HydraBandValues, HydraPatchController, PatchFactory } from '~/utils/glsl/types'
 
 const props = defineProps<{
   patchFactory: PatchFactory
@@ -23,8 +23,6 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ ready: [] }>()
-
-const colorTint = inject<Ref<TimeColorTint> | null>('timeColorTint', null)
 
 const containerEl = ref<HTMLDivElement | null>(null)
 const canvasAEl = ref<HTMLCanvasElement | null>(null)
@@ -155,9 +153,6 @@ async function initSlot(slot: number) {
       mid2: props.bands.mid2,
       high: props.bands.high,
     })
-    if (colorTint?.value) {
-      runtime.patchCtrl?.setColors?.(colorTint.value)
-    }
     runtime.bandLoop = requestAnimationFrame(pushBands)
   }
   runtime.bandLoop = requestAnimationFrame(pushBands)
