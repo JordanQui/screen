@@ -126,8 +126,16 @@ void main() {
   cM2 = hbri(cM2, -0.3 + vM2 * 0.35);
 
   vec2 stH = st + vec2(wfH) * (0.08 + Hv * 0.22);
-  vec4 cH  = hosc(stH, 22.0 + Hv * 16.0, 3.0);
-  cH = hcol(cH, Hv * 2.5 * cHigh.r, Hv * 2.5 * cHigh.g, Hv * 2.5 * cHigh.b);
+  // Aberration chromatique : prisme sur l'oscillateur des aigus
+  float hiChrom = pow(max(0.0, (Hv - 0.20) / 0.80), 1.6);
+  float offAb = hiChrom * 0.034;
+  float hFreq9 = 22.0 + Hv * 16.0;
+  vec4 cH = vec4(
+    hosc(fract(stH + vec2( offAb, 0.0)), hFreq9, 3.0).r * Hv * 2.5 * cHigh.r,
+    hosc(stH,                            hFreq9, 3.0).g * Hv * 2.5 * cHigh.g,
+    hosc(fract(stH - vec2( offAb, 0.0)), hFreq9, 3.0).b * Hv * 2.5 * cHigh.b,
+    1.0
+  );
   cH = hcon(cH, 1.2 + Hv * 1.0);
 
   vec4 res = cL;
@@ -148,11 +156,7 @@ void main() {
   float fbA = live ? min(0.88, 0.75 + E * 0.11) : 0.22;
   res = hblend(res, fb, fbA);
 
-  // Flash blanc distordu sur aigus forts
-  float hiBlast = pow(max(0.0, (Hv - 0.28) / 0.72), 1.8);
-  res.rgb = mix(res.rgb, vec3(1.0), hiBlast * 0.92);
-
-  vec3 t = 1.0 + (u_tint - vec3(1.0)) * 0.25;
+  vec3 t =1.0 + (u_tint - vec3(1.0)) * 0.25;
   res = hcol(res, t.r, t.g, t.b);
 
   gl_FragColor = res;

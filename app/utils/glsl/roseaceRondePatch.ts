@@ -102,10 +102,13 @@ void main() {
   logoUv += wL + wM + wH;
   logoUv = fract(logoUv);
 
-  // Lecture logo (grayscale, forcé saturate(0))
-  vec4 logoSample = texture2D(u_logo, logoUv);
-  float luma = dot(logoSample.rgb, vec3(0.299, 0.587, 0.114));
-  vec4 logo = vec4(vec3(luma), 1.0);
+  // Lecture logo — aberration chromatique sur aigus forts (R/G/B à des UV décalés)
+  float hiChrom = pow(max(0.0, (Hs - 0.20) / 0.80), 1.6);
+  float offAb = hiChrom * 0.030;
+  float lumaR = dot(texture2D(u_logo, fract(logoUv + vec2( offAb, 0.0))).rgb, vec3(0.299, 0.587, 0.114));
+  float lumaG = dot(texture2D(u_logo, logoUv).rgb,                             vec3(0.299, 0.587, 0.114));
+  float lumaB = dot(texture2D(u_logo, fract(logoUv - vec2( offAb, 0.0))).rgb, vec3(0.299, 0.587, 0.114));
+  vec4 logo = vec4(lumaR, lumaG, lumaB, 1.0);
 
   // Contraste et brightness réactifs
   logo = hcon(logo, 2.5 + L * 2.0 + Hs * 4.0);
@@ -147,10 +150,6 @@ void main() {
   float lumaThresh = 0.08 + Hs * 0.10;
   float lumaMask = dot(res.rgb, vec3(0.299, 0.587, 0.114));
   res *= smoothstep(lumaThresh - 0.04, lumaThresh + 0.04, lumaMask);
-
-  // Flash lumineux sur aigus forts (logo s'embrase)
-  float hiBlast = pow(max(0.0, (Hs - 0.28) / 0.72), 1.8);
-  res.rgb = clamp(res.rgb + vec3(hiBlast * 0.85), 0.0, 1.0);
 
   gl_FragColor = res;
 }

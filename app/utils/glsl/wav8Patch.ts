@@ -144,7 +144,15 @@ void main() {
   vec4 lowL = hcol(hosc(st, fLow,  0.0), bL  * cLow.r,  bL  * cLow.g,  bL  * cLow.b);
   vec4 m1L  = hcol(hosc(st, fM1,   0.0), bM1 * cMid1.r, bM1 * cMid1.g, bM1 * cMid1.b);
   vec4 m2L  = hcol(hosc(st, fM2,   0.0), bM2 * cMid2.r, bM2 * cMid2.g, bM2 * cMid2.b);
-  vec4 hiL  = hcol(hosc(st, fHigh, 0.0), bHi * cHigh.r, bHi * cHigh.g, bHi * cHigh.b);
+  // Aberration chromatique : prisme sur l'oscillateur des aigus
+  float hiChrom = pow(max(0.0, (Hh - 0.22) / 0.78), 1.6);
+  float offAb = hiChrom * 0.034;
+  vec4 hiL = vec4(
+    hosc(fract(st + vec2( offAb, 0.0)), fHigh, 0.0).r * bHi * cHigh.r,
+    hosc(st,                            fHigh, 0.0).g * bHi * cHigh.g,
+    hosc(fract(st - vec2( offAb, 0.0)), fHigh, 0.0).b * bHi * cHigh.b,
+    1.0
+  );
 
   vec4 res = lowL;
   res = hadd(res, m1L, min(1.0, M1 * 5.0));
@@ -169,10 +177,6 @@ void main() {
 
   res = hluma(res, 0.10, 0.08);
   res = hbri(res, -0.05);
-
-  // Flash blanc distordu sur aigus forts
-  float hiBlast = pow(max(0.0, (Hh - 0.32) / 0.68), 1.8);
-  res.rgb = mix(res.rgb, vec3(1.0), hiBlast * 0.92);
 
   vec3 t8 = 1.0 + (u_tint - vec3(1.0)) * 0.25;
   res = hcol(res, t8.r, t8.g, t8.b);

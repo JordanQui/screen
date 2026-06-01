@@ -156,10 +156,6 @@ void main() {
   vec4 cM2 = hosc(fract(st + vec2(s2y,-s2x) * beta2M2 * 0.024
                            + vec2(s3y,-s3x) * beta3   * 0.012),
                   fcM2, t * 0.16);
-  vec4 cHi = hosc(fract(st + vec2(s2x, s2y) * beta2H  * 0.018
-                           + vec2(s3x, s3y) * beta3   * 0.009),
-                  fcH,  t * 0.22);
-
   // ─── Couleurs FM Bell pilotées par l'analyse de pitch ───────────────────────
   float bL  = min(1.0, L  * 4.0);
   float bM1 = min(1.0, M1 * 4.0);
@@ -178,7 +174,17 @@ void main() {
   cL  = hcol(cL,  bL  * 2.0 * cLow.r,  bL  * 2.0 * cLow.g,  bL  * 2.0 * cLow.b);
   cM1 = hcol(cM1, bM1 * 2.0 * cMid1.r, bM1 * 2.0 * cMid1.g, bM1 * 2.0 * cMid1.b);
   cM2 = hcol(cM2, bM2 * 2.2 * cMid2.r, bM2 * 2.2 * cMid2.g, bM2 * 2.2 * cMid2.b);
-  cHi = hcol(cHi, bHi * 2.5 * cHigh.r, bHi * 2.5 * cHigh.g, bHi * 2.5 * cHigh.b);
+
+  // Aberration chromatique : prisme sur le carrier des aigus (FM Bell)
+  float hiChrom = pow(max(0.0, (Hs - 0.20) / 0.80), 1.6);
+  float offAb = hiChrom * 0.034;
+  vec2 stHi = fract(st + vec2(s2x, s2y) * beta2H * 0.018 + vec2(s3x, s3y) * beta3 * 0.009);
+  vec4 cHi = vec4(
+    hosc(fract(stHi + vec2( offAb, 0.0)), fcH, t * 0.22).r * bHi * 2.5 * cHigh.r,
+    hosc(stHi,                            fcH, t * 0.22).g * bHi * 2.5 * cHigh.g,
+    hosc(fract(stHi - vec2( offAb, 0.0)), fcH, t * 0.22).b * bHi * 2.5 * cHigh.b,
+    1.0
+  );
 
   // Accumulation sans écrêtage intermédiaire — évite la perte de teinte au clamp
   vec4 res = cL
@@ -215,10 +221,6 @@ void main() {
 
   res = hluma(res, 0.09, 0.07);
   res = hbri(res, -0.04);
-
-  // Flash blanc distordu sur aigus forts
-  float hiBlast = pow(max(0.0, (Hh - 0.32) / 0.68), 1.8);
-  res.rgb = mix(res.rgb, vec3(1.0), hiBlast * 0.92);
 
   vec3 tfm = 1.0 + (u_tint - vec3(1.0)) * 0.25;
   res = hcol(res, tfm.r, tfm.g, tfm.b);

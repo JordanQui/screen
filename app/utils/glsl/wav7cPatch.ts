@@ -134,8 +134,16 @@ void main() {
   vec4 oscLo = hcol(hosc(stW, fLow, sLv*0.25),              Lv*3.0,  Lv*0.6,  Lv*0.4);
   vec4 oscM1 = hcol(hosc(stW, fM1,  1.0),                   Mv1*2.5, Mv1*1.8, Mv1*0.5);
   vec4 oscM2 = hcol(hosc(stW, fM2,  1.0),                   Mv2*0.5, Mv2*2.2, Mv2*2.5);
-  vec4 oscHi = hcol(hoscS(stW, 60.0+sHs*50.0, 0.02+sHs*0.12, sHs*32.0, u_time),
-                    Hs*2.5, Hs*0.4, Hs*3.2);
+  // Aberration chromatique : prisme sur l'oscillateur des aigus
+  float hiChrom = pow(max(0.0, (Hs - 0.20) / 0.80), 1.6);
+  float offAb = hiChrom * 0.034;
+  float hFreq7 = 60.0 + sHs * 50.0; float hSync7 = 0.02 + sHs * 0.12; float hPh7 = sHs * 32.0;
+  vec4 oscHi = vec4(
+    hoscS(fract(stW + vec2( offAb, 0.0)), hFreq7, hSync7, hPh7, u_time).r * Hs * 2.5,
+    hoscS(stW,                            hFreq7, hSync7, hPh7, u_time).g * Hs * 0.4,
+    hoscS(fract(stW - vec2( offAb, 0.0)), hFreq7, hSync7, hPh7, u_time).b * Hs * 3.2,
+    1.0
+  );
 
   // Base: 4 oscillateurs combinés, contrast, brightness (-0.35 cf. Hydra)
   vec4 base = oscLo;
@@ -171,10 +179,6 @@ void main() {
   // .blend(o0, 0.18+E*0.25) — fondu temporel avec frame précédente (zoom feedback)
   vec4 prevPlain = texture2D(u_prev, st);
   res = hblend(res, prevPlain, 0.18 + E*0.25);
-
-  // Flash blanc distordu sur aigus forts
-  float hiBlast = pow(max(0.0, (Hs - 0.28) / 0.72), 1.8);
-  res.rgb = mix(res.rgb, vec3(1.0), hiBlast * 0.92);
 
   // .color(tint)
   vec3 t7c = 1.0 + (u_tint - vec3(1.0)) * 0.25;
