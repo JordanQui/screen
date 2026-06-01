@@ -1,6 +1,6 @@
 import type { GlslPatch } from './types'
 
-// Direct GLSL translation of wav9Patch — matches test.html MAIN_FS
+// wav9 — oscillateurs 4 bandes, feedback zoom tunnel, aberration chromatique sur aigus
 export const wav9Patch: GlslPatch = {
   fragSrc: `
 precision highp float;
@@ -16,6 +16,7 @@ uniform float u_vLv;
 uniform float u_vMv1;
 uniform float u_vMv2;
 uniform float u_energy;
+uniform float u_time;
 uniform vec3  u_tint;
 
 uniform vec3  u_pitch_color;
@@ -86,16 +87,11 @@ void main() {
   bool  live = E > 0.05;
   float FBG  = live ? pow((E - 0.05) / 0.95, 1.2) : 0.0;
 
-  float wfL  = hn(st, 0.18 + Lv  * 0.015, 0.0);
-  float wfM1 = hn(st, 0.15 + Mv1 * 0.025, 0.0);
-  float wfM2 = hn(st, 0.50 + Mv2 * 0.035, 0.0);
-  float wfH  = hn(st, 0.80 + Hv  * 0.080, 0.0);
-
-  // Distorsion UV sur aigus forts
-  float hiD = pow(max(0.0, (Hv - 0.25) / 0.75), 2.2);
-  st.x += sin(st.y * 42.0 + 7.0) * hiD * 0.06;
-  st.y += cos(st.x * 42.0 + 7.0) * hiD * 0.06;
-  st = fract(st);
+  // Warps noise animés — plus de verre statique
+  float wfL  = hn(st, 0.18 + Lv  * 0.015, u_time * 0.10);
+  float wfM1 = hn(st, 0.15 + Mv1 * 0.025, u_time * 0.15);
+  float wfM2 = hn(st, 0.50 + Mv2 * 0.035, u_time * 0.20);
+  float wfH  = hn(st, 0.80 + Hv  * 0.080, u_time * 0.32);
 
   // Couleurs pilotées par l'analyse de pitch
   vec3 pc   = max(u_pitch_color, vec3(0.06));
@@ -125,11 +121,11 @@ void main() {
   cM2 = hcon(cM2, 1.2 + vM2 * 1.2);
   cM2 = hbri(cM2, -0.3 + vM2 * 0.35);
 
+  // Oscillateur high : aberration chromatique (pas de warp verre)
   vec2 stH = st + vec2(wfH) * (0.08 + Hv * 0.22);
-  // Aberration chromatique : prisme sur l'oscillateur des aigus
   float hiChrom = pow(max(0.0, (Hv - 0.20) / 0.80), 1.6);
-  float offAb = hiChrom * 0.034;
-  float hFreq9 = 22.0 + Hv * 16.0;
+  float offAb   = hiChrom * 0.034;
+  float hFreq9  = 22.0 + Hv * 16.0;
   vec4 cH = vec4(
     hosc(fract(stH + vec2( offAb, 0.0)), hFreq9, 3.0).r * Hv * 2.5 * cHigh.r,
     hosc(stH,                            hFreq9, 3.0).g * Hv * 2.5 * cHigh.g,
@@ -145,18 +141,21 @@ void main() {
   res = hcon(res, 1.0 + E * 0.5);
   res = hbri(res, -0.2 + E * 0.25);
 
-  vec2 fbSt = st
-    + vec2(hn(st, 1.2, 0.015)) * (vLv * 0.04 * FBG)
-    + vec2(hn(st, 4.5, 0.04))  * (Hv  * 0.03 * FBG);
-  fbSt = clamp(fbSt, 0.0, 1.0);
+  // Feedback zoom tunnel : chaque frame est lue depuis un UV légèrement rétréci
+  // → le contenu précédent semble s'approcher / zoomer vers le spectateur
+  float zoomFb = 1.010 + Lv * 0.012 + E * 0.008;
+  vec2 fbUv = (vUv - 0.5) / zoomFb + 0.5;
+  fbUv += vec2(hn(fbUv, 1.2, u_time * 0.08)) * (vLv * 0.018 * FBG)
+        + vec2(hn(fbUv, 3.5, u_time * 0.14)) * (Hv  * 0.012 * FBG);
+  fbUv = clamp(fbUv, 0.0, 1.0);
 
-  vec4 fb = texture2D(u_prev, fbSt);
-  fb = hbri(fb, -(0.006 - E * 0.005));
+  vec4 fb = texture2D(u_prev, fbUv);
+  fb = hbri(fb, -(0.010 - E * 0.006));
 
-  float fbA = live ? min(0.88, 0.75 + E * 0.11) : 0.22;
+  float fbA = live ? min(0.80, 0.65 + E * 0.13) : 0.18;
   res = hblend(res, fb, fbA);
 
-  vec3 t =1.0 + (u_tint - vec3(1.0)) * 0.25;
+  vec3 t = 1.0 + (u_tint - vec3(1.0)) * 0.25;
   res = hcol(res, t.r, t.g, t.b);
 
   gl_FragColor = res;
